@@ -31,7 +31,7 @@ export function build() {
   const PLATE = { x: -18, y: -62, w: 470, d: 148, r: 8 };
   const P = k.fitProjection([...k.boxCorners(PLATE, -17, 0), [0, -22, 62], [TUBE_X1, 0, BEAM_Z + 20]], W, H, { pad: 24, azimuth: 32, elevation: 32 });
   const { at, S, L, D } = tools(P);
-  const out = [bench(P, PLATE)];
+  const out = [`<g data-part="base">${bench(P, PLATE)}</g>`, `<g data-part="source">`];
 
   // Source castle: lead bricks with a bored collimator on the +x face and a capsule plug on top.
   out.push(S(k.slabOf(CASTLE, 0, 8, P, 2, 0.5), { tone: "mid" }));
@@ -44,6 +44,7 @@ export function build() {
   out.push(D([[6, -16], [34, -16], [6, 16], [34, 16]].map(([x, y]) => at([x, y, 60])), { size: 0.45 }));
   out.push(k.faceTextSvg(k.sideMatrix([CASTLE.x + 6, CASTLE.y + CASTLE.d - 1], 14, P, "left"), "Pb", { size: 4, tone: "lo" }));
 
+  out.push(`</g><g data-part="base">`);
   // Slide rails for each station (across y) and a beam-height stop.
   for (const s of STATIONS) {
     const rail = { x: s.x - 6, y: SLIDE - 24, w: s.t + 12, d: 24 - SLIDE + 24, r: 1.5 };
@@ -52,12 +53,13 @@ export function build() {
     out.push(D([at([rail.x + 2.5, rail.y + 3, 3]), at([rail.x + rail.w - 2.5, rail.y + rail.d - 3, 3])], { size: 0.4 }));
   }
 
+  out.push(`</g>`);
   // Beam segments interleaved with absorbers (painted back to front along +x).
   const xs = [CASTLE.x + CASTLE.w, ...STATIONS.flatMap((s) => [s.x, s.x + s.t]), TUBE_X0];
   const seg = (i) => {
     const from = xs[i * 2], to = xs[i * 2 + 1];
     const d = k.segment([from, 0, BEAM_Z], [to, 0, BEAM_Z], P);
-    return `<g data-seg="${i}"><path class="iso-line fig-beam" data-tone="lit" d="${d}" style="stroke-width:2.4;opacity:.16"/><path class="iso-line fig-beam" data-tone="lit" data-flow d="${d}" style="stroke-width:1.2"/></g>`;
+    return `<g data-seg="${i}" data-part="beam"><path class="iso-line fig-beam" data-tone="lit" d="${d}" style="stroke-width:2.4;opacity:.16"/><path class="iso-line fig-beam" data-tone="lit" data-flow d="${d}" style="stroke-width:1.2"/></g>`;
   };
   const plateOf = (s) => {
     const plan = { x: s.x, y: -24, w: s.t, d: 48, r: Math.min(1.5, s.t / 3) };
@@ -68,11 +70,12 @@ export function build() {
     if (s.t >= 5) body.push(D([at([s.x + s.t / 2, -20, 57]), at([s.x + s.t / 2, 20, 57])], { size: 0.45 }));
     const pull = { x: s.x + s.t / 2 - 2, y: 24, w: 4, d: 5, r: 1 };
     body.push(S(k.slabOf(pull, 44, 6, P, 2), { tone: "mid" }));
-    return `<g data-plate="${s.id}">${body.join("")}</g>`;
+    return `<g data-plate="${s.id}" data-part="${s.id}">${body.join("")}</g>`;
   };
   out.push(seg(0));
   STATIONS.forEach((s, i) => { out.push(plateOf(s)); out.push(seg(i + 1)); });
 
+  out.push(`<g data-part="detector">`);
   // Detector: a Geiger–Müller tube on two V-saddles, a lead to the counter, the counter's dial.
   for (const x of [TUBE_X0 + 10, TUBE_X1 - 10]) {
     out.push(S(k.slabOf({ x: x - 3, y: -8, w: 6, d: 16, r: 1 }, 0, BEAM_Z - TUBE_R - 4, P, 2, 0.4), { tone: "mid" }));
@@ -83,6 +86,7 @@ export function build() {
   out.push(S(G.disc(4, TUBE_X1 - TUBE_X0 - 6, TUBE_R, axis, P), { tone: "hi", lit: true, inner: L([14, 26, 38].map((s) => G.arcOf(axis, s, TUBE_R, P)).join(""), { tone: "faint" }) }));
   out.push(S(G.disc(TUBE_X1 - TUBE_X0 - 6, TUBE_X1 - TUBE_X0, TUBE_R + 1.6, axis, P), { tone: "mid" }));
   out.push(S(G.disc(TUBE_X1 - TUBE_X0, TUBE_X1 - TUBE_X0 + 6, 2.4, axis, P), { tone: "mid" }));
+  out.push(`</g><g data-part="counter">`);
   out.push(`<path class="iso-halo" d="${k.haloOf(BOX, 0, 18, P)}" style="filter:blur(5px)"/>`);
   out.push(S(k.slabOf(BOX, 0, 18, P, 4, 0.8), { tone: "mid", inner: L(k.sideSeam(BOX, 4, P, 4), { tone: "faint" }) }));
   const dial = [BOX.x + 17, BOX.y + 17];
@@ -94,7 +98,7 @@ export function build() {
   const plug = [TUBE_X1 + 6, 0, BEAM_Z];
   out.push(k.wireSvg(at(plug), at([BOX.x + 23, BOX.y, 9]), { via: [at([TUBE_X1 + 18, 0, BEAM_Z]), at([TUBE_X1 + 18, 0, 9]), at([BOX.x + 23, 6, 9])].map((p) => p), tone: "mid" }));
   out.push(`<path data-needle class="iso-line" data-tone="lit" data-free="start" style="stroke-width:1.1" d="${needlePath(P, dial[0], dial[1], 19.8, 12, 0.9, { span: Math.PI, from: -Math.PI / 2 })}"/>`);
-  out.push(`<g data-blip>${D([at([BOX.x + 38, BOX.y + 10, 21])], { size: 1.3, tone: "hi" })}</g>`);
+  out.push(`<g data-blip>${D([at([BOX.x + 38, BOX.y + 10, 21])], { size: 1.3, tone: "hi" })}</g></g>`);
 
   const svg = k.figureSvg({
     width: W,
@@ -154,6 +158,7 @@ sync();
 `;
 
   return {
+    P,
     name: "shielding",
     live,
     html: card({

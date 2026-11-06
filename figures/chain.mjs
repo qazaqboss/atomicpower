@@ -18,7 +18,7 @@ export function build() {
   const PLATE = { x: TABLE.x - 18, y: TABLE.y - 14, w: TABLE.w + 36, d: TABLE.d + 44, r: 8 };
   const P = k.fitProjection([...k.boxCorners(PLATE, -17, 0), [TABLE.x, TABLE.y, 16]], W, H, { pad: 26, azimuth: 36, elevation: 34 });
   const { at, S, L, D, byDepth } = tools(P);
-  const out = [bench(P, PLATE, { ruler: false })];
+  const out = [`<g data-part="base">${bench(P, PLATE, { ruler: false })}</g>`, `<g data-part="table">`];
 
   // Table bed and cushions (the front cushion is cut by a slot per blade).
   out.push(`<path class="iso-halo" d="${k.haloOf(TABLE, 0, 4, P)}" style="filter:blur(5px)"/>`);
@@ -33,38 +33,41 @@ export function build() {
   const right = { x: TABLE.x + TABLE.w - CUSHION, y: TABLE.y + CUSHION, w: CUSHION, d: TABLE.d - CUSHION * 2, r: 1 };
   for (const c of back) out.push(S(k.slabOf(c, z0, 9, P, 3, 0.5), { tone: "mid" }));
 
+  out.push(`</g><g data-part="source">`);
   // Neutron source capsule on the left cushion.
   out.push(S(k.cylinder(TABLE.x + CUSHION / 2, 0, 3.6, z0 + 9, 4, P, 20), { tone: "hi", lit: true }));
   out.push(D([at([TABLE.x + CUSHION / 2, 0, z0 + 13])], { size: 0.6, tone: "hi" }));
+  out.push(`</g>`);
 
   // Nuclei: a ball on a small seat each, sorted back to front; fragments are pre-built and hidden.
   const nuclei = [];
   for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) nuclei.push([-(COLS - 1) * GAP / 2 + i * GAP, -(ROWS - 1) * GAP / 2 + j * GAP, j * COLS + i]);
   // Blades rise out of slots in the bed between nucleus columns; paint column by column.
   const byCol = (c) => nuclei.filter(([x]) => Math.abs(x - (-(COLS - 1) * GAP / 2 + c * GAP)) < 0.1).sort((a, b) => a[1] - b[1]);
-  for (const x of BLADES) out.push(L(k.planOutline({ x: x - 0.8, y: TABLE.y + CUSHION + 2, w: BLADE_T + 1.6, d: BLADE_D - 4, r: 0.5 }, 3, P, 2), { tone: "lo" }));
+  for (const x of BLADES) out.push(`<g data-part="table">` + L(k.planOutline({ x: x - 0.8, y: TABLE.y + CUSHION + 2, w: BLADE_T + 1.6, d: BLADE_D - 4, r: 0.5 }, 3, P, 2), { tone: "lo" }) + `</g>`);
   const layer = [];
   for (let c = 0; c < COLS; c++) {
     for (const [x, y, i] of byCol(c)) {
       const seat = L(k.ring(x, y, NUC_R + 1.2, z0, P, 20), { tone: "faint" });
       const ball = S(G.sphereOf([x, y, z0 + NUC_Z], NUC_R, P, { steps: 20 }), { tone: "hi", lit: true });
       const frags = [-1, 1].map((s) => S(G.sphereOf([x + s * 3.4, y - s * 1.2, z0 + 3], 2.5, P, { steps: 16 }), { tone: "lo", crease: "none" })).join("");
-      layer.push(`<g data-nuc="${i}">${seat}<g data-whole>${ball}</g><g data-split style="display:none">${frags}</g></g>`);
+      layer.push(`<g data-nuc="${i}" data-part="nuclei">${seat}<g data-whole>${ball}</g><g data-split style="display:none">${frags}</g></g>`);
     }
     const cx = -(COLS - 1) * GAP / 2 + c * GAP;
-    BLADES.forEach((bx, b) => { if (bx > cx && bx < cx + GAP) layer.push(`<g data-blade="${b}"></g>`); });
+    BLADES.forEach((bx, b) => { if (bx > cx && bx < cx + GAP) layer.push(`<g data-blade="${b}" data-part="blades"></g>`); });
   }
   out.push(`<g data-layer>${layer.join("")}</g>`);
-  out.push(S(k.slabOf(right, z0, 9, P, 3, 0.5), { tone: "mid" }));
+  out.push(`<g data-part="table">` + S(k.slabOf(right, z0, 9, P, 3, 0.5), { tone: "mid" }));
 
   out.push(S(k.slabOf({ x: TABLE.x, y: TABLE.y + TABLE.d - CUSHION, w: TABLE.w, d: CUSHION, r: 2 }, z0, 9, P, 3, 0.5), { tone: "mid" }));
+  out.push(`</g><g data-part="lever">`);
   const lever = { x: TABLE.x + 30, y: TABLE.y + TABLE.d + 8, w: TABLE.w - 60, d: 10, r: 2 };
   out.push(S(k.slabOf(lever, 0, 3, P, 3, 0.4), { tone: "mid" }));
   out.push(L(k.lineOnTop([lever.x + 6, lever.y + 5], [lever.x + lever.w - 6, lever.y + 5], 3, P), { tone: "faint" }));
   out.push(D(k.corners(lever, 2.5).map(([x, y]) => at([x, y, 3])), { size: 0.45 }));
   out.push(`<g data-slider transform="${k.translateAlong(P, [0, 0, 0])}">${S(k.slabOf({ x: lever.x + 3, y: lever.y - 1, w: 10, d: 12, r: 1.5 }, 3, 4, P, 3, 0.4), { tone: "hi", lit: true })}</g>`);
   out.push(knob(P, TABLE.x + TABLE.w - 12, TABLE.y + TABLE.d + 14, 0, 5, 5));
-  out.push(`<g data-neutrons></g>`);
+  out.push(`</g><g data-neutrons data-part="neutrons"></g>`);
 
   const svg = k.figureSvg({
     width: W,
@@ -165,6 +168,7 @@ stage.addEventListener("keydown", (e) => {
 `;
 
   return {
+    P,
     name: "chain",
     live,
     html: card({

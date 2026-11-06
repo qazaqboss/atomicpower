@@ -26,7 +26,7 @@ export function build() {
   const PLATE = { x: -92, y: -66, w: 184, d: 150, r: 8 };
   const P = k.fitProjection([...k.boxCorners(PLATE, -17, 0), [-POST_X - 6, 0, BEAM_Z + 8], [POST_X + 6, 0, BEAM_Z + 8]], W, H, { pad: 22, azimuth: 40, elevation: 30 });
   const { at, S, L, D, byDepth } = tools(P);
-  const out = [bench(P, PLATE)];
+  const out = [`<g data-part="base">${bench(P, PLATE)}</g>`, `<g data-part="grid">`];
   const half = (NFA * FA) / 2;
 
   // Grid plate on four legs.
@@ -41,7 +41,7 @@ export function build() {
     S(k.slabOf({ x: x - 4, y: -4, w: 8, d: 8, r: 1 }, 4, BEAM_Z - 4, P, 2, 0.4), { tone: "mid", inner: L([30, 60, 90, 120].map((z) => k.sideSeam({ x: x - 4, y: -4, w: 8, d: 8, r: 1 }, z, P, 2)).join(""), { tone: "faint" }) }),
     D([at([x - 4.5, -6, 4]), at([x + 4.5, 6, 4])], { size: 0.45 }),
   ].join("");
-  out.push(post(-POST_X));
+  out.push(`</g><g data-part="bridge">${post(-POST_X)}</g><g data-part="fuel">`);
 
   // Fuel assemblies: shroud, a top nozzle with a dot pattern of rod ends, guide hole if rodded.
   const cells = [];
@@ -63,12 +63,14 @@ export function build() {
     out.push(L(k.ring(x, y, rodded ? ROD_R + 0.8 : 1.2, ZC1, P, 20), { tone: rodded ? "mid" : "faint" }));
   }
 
+  out.push(`</g>`);
   // Cherenkov glow over the core: its strength follows the power.
   out.push(`<defs><radialGradient id="fig-core-glow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#7fb2ff" stop-opacity=".9"/><stop offset=".55" stop-color="#3d7bff" stop-opacity=".35"/><stop offset="1" stop-color="#3d7bff" stop-opacity="0"/></radialGradient></defs>`);
-  out.push(`<path data-glow class="fig-glow" d="${k.ring(0, 0, half + 8, ZC1 + 1, P, 64)}" fill="url(#fig-core-glow)" style="opacity:.5"/>`);
+  out.push(`<path data-glow data-part="glow" class="fig-glow" d="${k.ring(0, 0, half + 8, ZC1 + 1, P, 64)}" fill="url(#fig-core-glow)" style="opacity:.5"/>`);
 
   // Rods (rebuilt per frame), drive housings, the beam and the right post.
-  out.push(`<g data-rods>${RODS.map((x) => `<g data-rod="${x}"></g>`).join("")}</g>`);
+  out.push(`<g data-rods data-part="rods">${RODS.map((x) => `<g data-rod="${x}"></g>`).join("")}</g>`);
+  out.push(`<g data-part="bridge">`);
   for (const x of RODS) {
     out.push(S(k.cylinder(x, 0, 4.6, HOUSING_Z0, HOUSING_Z1 - HOUSING_Z0, P, 28), { tone: "mid", inner: L(k.sideArc(x, 0, 4.6, HOUSING_Z0 + 6, P, 16), { tone: "faint" }) }));
     out.push(S(k.cylinder(x, 0, 2.2, HOUSING_Z0 - 2, 2, P, 18), { tone: "mid" }));
@@ -76,13 +78,14 @@ export function build() {
   const beam = { x: -POST_X - 5, y: -6, w: POST_X * 2 + 10, d: 12, r: 1.5 };
   out.push(S(k.slabOf(beam, BEAM_Z, 7, P, 3, 0.6), { tone: "mid", inner: L(k.sideSeam(beam, BEAM_Z + 3.5, P, 3), { tone: "faint" }) }));
   out.push(D(RODS.map((x) => at([x, 0, BEAM_Z + 7])), { size: 0.5 }));
-  out.push(post(POST_X));
+  out.push(post(POST_X) + `</g><g data-part="chamber">`);
 
   // Ion chamber at the front-left, cabled to the power meter at the front-right.
   const ic = [-58, 46];
   out.push(S(k.cylinder(ic[0], ic[1], 6, 0, 3, P, 28), { tone: "lo" }));
   out.push(S(k.cylinder(ic[0], ic[1], 4.4, 3, 34, P, 28), { tone: "hi", inner: L([12, 24].map((z) => k.sideArc(ic[0], ic[1], 4.4, z, P, 16)).join(""), { tone: "faint" }) }));
   out.push(S(k.cylinder(ic[0], ic[1], 2.4, 37, 4, P, 18), { tone: "mid" }));
+  out.push(`</g><g data-part="meter">`);
   const meter = { x: 30, y: 40, w: 46, d: 30, r: 3 };
   out.push(`<path class="iso-halo" d="${k.haloOf(meter, 0, 16, P)}" style="filter:blur(5px)"/>`);
   out.push(k.wireSvg(at([ic[0], ic[1], 41]), at([meter.x, meter.y + 15, 8]), { via: [at([ic[0], ic[1], 46]), at([ic[0] + 10, ic[1] + 14, 0]), at([meter.x - 10, meter.y + 15, 0]), at([meter.x - 4, meter.y + 15, 8])], tone: "mid" }));
@@ -95,6 +98,7 @@ export function build() {
   out.push(S(k.cylinder(meter.x + 37, meter.y + 22, 3, 16, 3, P, 20), { tone: "mid" }));
   out.push(D(k.corners(meter, 2.5).map(([x, y]) => at([x, y, 16])), { size: 0.45 }));
   out.push(`<path data-needle class="iso-line" data-tone="lit" data-free="start" style="stroke-width:1.1" d="${needlePath(P, dial[0], dial[1], 17.8, 12, 0.8, { span: Math.PI * 1.4, from: -Math.PI * 0.7 })}"/>`);
+  out.push(`</g>`);
 
   const svg = k.figureSvg({
     width: W,
@@ -184,6 +188,7 @@ drawRods();
 `;
 
   return {
+    P,
     name: "core",
     live,
     html: card({

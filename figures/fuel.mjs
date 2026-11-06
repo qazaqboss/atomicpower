@@ -35,7 +35,7 @@ export function build() {
   PLATE.w = Math.max(ROD_X1 + 70, HEX[0] + HEX_R + 120) - PLATE.x;
   const P = k.fitProjection([...k.boxCorners(PLATE, -17, 0), [HEX[0], HEX[1] - HEX_R, HEX_H + 6]], W, H, { pad: 24, azimuth: 34, elevation: 32 });
   const { at, S, L, D } = tools(P);
-  const out = [bench(P, PLATE, { label: false })];
+  const out = [`<g data-part="base">${bench(P, PLATE, { label: false })}</g>`, `<g data-part="hex">`];
 
   // Hex assembly section: a standing hexagonal shroud with every lattice position on its top.
   const ring = [0, 1, 2, 3, 4, 5].map((i) => [HEX[0] + HEX_R * Math.cos((i * Math.PI) / 3), HEX[1] + HEX_R * Math.sin((i * Math.PI) / 3)]);
@@ -52,10 +52,11 @@ export function build() {
     else fuel.push(k.ring(x, y, R_OUT, HEX_H, P, 14));
   }
   out.push(L(fuel.join(""), { tone: "lo" }));
-  out.push(L(guides.join(""), { tone: "hi" }));
+  out.push(`<g data-part="guides">` + L(guides.join(""), { tone: "hi" }) + `</g>`);
   out.push(D(pts.filter((p) => !guide(p) && p[2] > 0).map((p) => at([HEX[0] + p[0], HEX[1] + p[1], HEX_H])), { size: 0.55, tone: "mid" }));
   out.push(L(k.onTop(ring.map(([x, y]) => [HEX[0] + (x - HEX[0]) * 0.97, HEX[1] + (y - HEX[1]) * 0.97]), HEX_H, P, true), { tone: "faint" }));
 
+  out.push(`</g><g data-part="vblocks">`);
   // V-blocks for the rod.
   for (const x of [ROD_X0 + 40, -100, ROD_X1 - 30]) {
     const block = { x: x - 7, y: ROD_Y - 12, w: 14, d: 24, r: 1.5 };
@@ -63,12 +64,13 @@ export function build() {
     out.push(D([at([x - 4, ROD_Y - 9, ROD_Z - R_OUT - 1]), at([x + 4, ROD_Y + 9, ROD_Z - R_OUT - 1])], { size: 0.4 }));
   }
 
+  out.push(`</g>`);
   // The rod: a closed end plug, the cladding (an annulus, so its open end shows the bore).
   const F = G.frameAlong([ROD_X0, ROD_Y, ROD_Z], [1, 0, 0]);
-  out.push(S(G.solidOf([[-12, 0], [-12, 1.6], [-9, 2.4, 1], [-6, 3.2], [-6, 4.55], [0, 4.55]], F, P), { tone: "mid" }));
-  out.push(`<g data-back></g>`);
-  out.push(S(G.ringBand(0, ROD_X1 - ROD_X0, R_IN, R_OUT, F, P), { tone: "mid", inner: L([60, 130, 200].map((s) => G.arcOf(F, s, R_OUT, P)).join(""), { tone: "faint" }) }));
-  out.push(`<g data-front></g>`);
+  out.push(`<g data-part="cladding">` + S(G.solidOf([[-12, 0], [-12, 1.6], [-9, 2.4, 1], [-6, 3.2], [-6, 4.55], [0, 4.55]], F, P), { tone: "mid" }) + `</g>`);
+  out.push(`<g data-back data-part="pellets"></g>`);
+  out.push(`<g data-part="cladding">` + S(G.ringBand(0, ROD_X1 - ROD_X0, R_IN, R_OUT, F, P), { tone: "mid", inner: L([60, 130, 200].map((s) => G.arcOf(F, s, R_OUT, P)).join(""), { tone: "faint" }) }) + `</g>`);
+  out.push(`<g data-front data-part="pellets"></g>`);
 
   // Pellets, built at rest inside the tube; live code moves them and files each into back or front.
   const pellets = [];
@@ -80,6 +82,7 @@ export function build() {
   }
   out.push(`<g data-pellets style="display:none">${pellets.join("")}</g>`);
 
+  out.push(`<g data-part="tray">`);
   // An end cap lying on the bench and a small pellet tray.
   const capF = G.frameAlong([ROD_X1 + 40, ROD_Y + 4, R_OUT + 0.2], [1, 0, 0]);
   out.push(S(G.solidOf([[0, 0], [0, 4.55], [6, 4.55], [9, 3.2, 1], [12, 1.6], [12, 0]], capF, P), { tone: "mid" }));
@@ -91,6 +94,7 @@ export function build() {
     out.push(S(k.cylinder(cx, cy, PEL_R, 4, PEL_L, P, 22), { tone: "hi", inner: L(k.sideArc(cx, cy, PEL_R, 9, P, 12), { tone: "faint" }) }));
     out.push(L(k.ring(cx, cy, PEL_R - 0.9, 4 + PEL_L, P, 18), { tone: "faint" }));
   }
+  out.push(`</g>`);
 
   const svg = k.figureSvg({
     width: W,
@@ -136,6 +140,7 @@ draw();
 `;
 
   return {
+    P,
     name: "fuel",
     live,
     html: card({

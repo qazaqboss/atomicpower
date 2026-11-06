@@ -34,7 +34,7 @@ export function build() {
   const PLATE = { x: TRAY.x - 16, y: TRAY.y - 14, w: DIAL[0] + DIAL_R + 22 - (TRAY.x - 16), d: TRAY.d + 34, r: 8 };
   const P = k.fitProjection([...k.boxCorners(PLATE, -17, 0), [TRAY.x, TRAY.y, 20], [DIAL[0], DIAL[1], DIAL_H + 40]], W, H, { pad: 26, azimuth: 40 });
   const { at, S, L, D, byDepth } = tools(P);
-  const out = [bench(P, PLATE)];
+  const out = [`<g data-part="base">${bench(P, PLATE)}</g>`, `<g data-part="tray">`];
 
   // The tray: a thick plate with a raised rim, a grid of cups bored into its top.
   out.push(`<path class="iso-halo" d="${k.haloOf(TRAY, TRAY_Z, TRAY_H, P)}" style="filter:blur(5px)"/>`);
@@ -54,8 +54,8 @@ export function build() {
     const child = G.sphereOf([x, y, z + 0.6], 2.2, P, { steps: 16 });
     return `<g data-atom="${index}"><g data-parent>${S(ball, { tone: "hi", lit: true })}</g><g data-child style="display:none">${S(child, { tone: "lo", crease: "none" })}</g></g>`;
   });
-  out.push(`<g>${atoms.join("")}</g>`);
   out.push(D(k.corners(TRAY, 3).map(([x, y]) => at([x, y, z])), { size: 0.45 }));
+  out.push(`</g><g data-part="atoms">${atoms.join("")}</g><g data-part="timer">`);
 
   // Timer: a round dial on a pedestal, one division per tenth of a half-life, a knob to reset.
   const [dx, dy] = DIAL;
@@ -68,7 +68,7 @@ export function build() {
   out.push(S(k.slabOf({ x: dx - 10, y: dy + DIAL_R + 6, w: 20, d: 7, r: 1 }, 0, 0.8, P, 3, 0.3), { tone: "lo", crease: "none" }));
   for (let i = 0; i < 2; i++) out.push(L(k.lineOnTop([dx - 7, dy + DIAL_R + 8.2 + i * 2.4], [dx + 5 - i * 4, dy + DIAL_R + 8.2 + i * 2.4], 0.8, P), { tone: "faint", free: true }));
   const needleZ = 3 + DIAL_H;
-  out.push(`<path data-needle class="iso-line" data-tone="lit" data-free="start" style="stroke-width:1.1" d="${needlePath(P, dx, dy, needleZ, DIAL_R - 1, 0, { span: Math.PI * 1.6, from: -Math.PI * 0.8 })}"/>`);
+  out.push(`<path data-needle class="iso-line" data-tone="lit" data-free="start" style="stroke-width:1.1" d="${needlePath(P, dx, dy, needleZ, DIAL_R - 1, 0, { span: Math.PI * 1.6, from: -Math.PI * 0.8 })}"/></g>`);
 
   const svg = k.figureSvg({
     width: W,
@@ -129,6 +129,7 @@ draw();
 `;
 
   return {
+    P,
     name: "decay",
     live,
     html: card({

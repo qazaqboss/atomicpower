@@ -24,8 +24,9 @@ export function build() {
   const W = 640, H = 420;
   const P = k.fitProjection([...k.boxCorners(PLATE, -17, 0), [PANEL.x, PANEL.y, PANEL_H + 4], [X0, RAIL_Y, POST_H + 8], [-X0, RAIL_Y, POST_H + 8]], W, H, { pad: 26, azimuth: 38 });
   const { at, S, L, D } = tools(P);
-  const out = [bench(P, PLATE)];
+  const out = [`<g data-part="base">${bench(P, PLATE)}</g>`];
 
+  out.push(`<g data-part="panel">`);
   // Back panel: a scale wall with a rule every 1 MeV and a heavier rule every 5 MeV.
   out.push(S(k.slabOf({ x: PANEL.x - 2, y: PANEL.y - 1, w: PANEL.w + 4, d: PANEL.d + 2, r: 1.2 }, 0, 3, P, 3, 0.4), { tone: "mid" }));
   const rules = [];
@@ -42,6 +43,7 @@ export function build() {
   out.push(k.faceTextSvg(k.sideMatrix([PANEL.x + PANEL.w - 40, PANEL.y + PANEL.d], PANEL_H - 5, P, "left"), "МэВ / нуклон", { size: 3, tone: "lo" }));
   out.push(D([at([PANEL.x + 4, PANEL.y + PANEL.d, PANEL_H - 4]), at([PANEL.x + PANEL.w - 4, PANEL.y + PANEL.d, PANEL_H - 4])], { size: 0.5 }));
 
+  out.push(`</g><g data-part="rail">`);
   // Front rail with end stops.
   const rail = { x: X0 - 22, y: RAIL_Y - 4, w: (COUNT - 1) * STEP + 44, d: 8, r: 1.5 };
   out.push(S(k.slabOf(rail, 0, 4, P, 3, 0.5), { tone: "mid", inner: k.lineSvg(k.sideSeam(rail, 2, P, 3), { tone: "faint" }) }));
@@ -51,6 +53,7 @@ export function build() {
     out.push(D([at([x + 2.5, RAIL_Y - 3, 9]), at([x + 2.5, RAIL_Y + 3, 9])], { size: 0.45 }));
   }
 
+  out.push(`</g>`);
   // Columns, each in its own group so the probe can be slotted between them in depth order.
   const cols = NUCLIDES.map(([, , ba], i) => {
     const x = X0 + i * STEP;
@@ -63,7 +66,7 @@ export function build() {
       k.lineSvg(k.planOutline(k.insetPlan(plan, 2), h, P, 3), { tone: "faint" }),
       D([at([x, COL_Y, h])], { size: 0.45, tone: "lo" }),
     ];
-    return `<g data-col="${i}">${body.join("")}</g>`;
+    return `<g data-col="${i}" data-part="columns">${body.join("")}</g>`;
   });
 
   // Probe: carriage on the rail, a post, and an arm on a clamp that slides down the post.
@@ -90,8 +93,8 @@ export function build() {
   const startIndex = 8;
   const startX = X0 + startIndex * STEP;
   const startZ = NUCLIDES[startIndex][2] * PER_MEV;
-  const probe = `<g data-probe-arm transform="${k.translateAlong(P, [startX, 0, startZ])}">${arm.join("")}</g>`;
-  const probeBase = `<g data-probe-base transform="${k.translateAlong(P, [startX, 0, 0])}">${carriage.join("")}</g>`;
+  const probe = `<g data-probe-arm data-part="probe" transform="${k.translateAlong(P, [startX, 0, startZ])}">${arm.join("")}</g>`;
+  const probeBase = `<g data-probe-base data-part="probe" transform="${k.translateAlong(P, [startX, 0, 0])}">${carriage.join("")}</g>`;
 
   const svg = k.figureSvg({
     width: W,
@@ -159,6 +162,7 @@ draw();
 `;
 
   return {
+    P,
     name: "binding",
     live,
     html: card({

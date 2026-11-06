@@ -5,6 +5,9 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ISO_CSS } from "./kit/iso-kit.mjs";
 import { FORMULAS } from "./src/formulas.mjs";
+import { FIGURES as GUIDE, CHAPTERS as CH_GUIDE, VOICE } from "./src/guide.mjs";
+import { existsSync } from "node:fs";
+import { axisVector } from "./kit/iso-kit.mjs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const OUT = join(ROOT, "docs");
@@ -17,6 +20,30 @@ const FIG_NAMES = ["binding", "decay", "shielding", "chain", "core", "fuel", "lo
 });
 const figures = {};
 for (const name of FIG_NAMES) figures[name] = (await import(`./figures/${name}.mjs`)).build();
+const audio = (name) => (existsSync(join(ROOT, "src/audio", name + ".mp3")) ? `assets/audio/${name}.mp3` : null);
+const TITLES = { binding: "Энергия связи", decay: "Закон распада", shielding: "Защита от излучений", chain: "Цепная реакция", core: "Управление реактором", fuel: "Твэл и ТВС", loop: "Энергоблок ВВЭР-1000" };
+const guidePanel = (name) => {
+  const g = GUIDE[name];
+  if (!g) return "";
+  const P = figures[name].P;
+  const data = {
+    name, title: TITLES[name], intro: g.intro, introSrc: audio(`fig-${name}-intro`),
+    up: axisVector(P, [0, 0, 1]).map((v) => +v.toFixed(4)),
+    parts: g.parts.map((p) => ({ ...p, src: audio(`fig-${name}-${p.id}`) })),
+  };
+  return `<div class="fig-guide" data-guide-for="${name}">
+  <div class="fig-guide-bar">
+    <button type="button" class="fig-guide-main" data-guide-tour aria-pressed="false">▶ Экскурсия с гидом</button>
+    <button type="button" data-guide-apart aria-pressed="false">Разобрать</button>
+    <button type="button" data-guide-inspect aria-pressed="false">Осмотр деталей</button>
+    <span class="fig-guide-voice">Голос: ElevenLabs</span>
+  </div>
+  <div class="fig-guide-parts" role="list" aria-label="Детали модели">${g.parts.map((p, i) => `<button type="button" role="listitem" data-guide-part="${p.id}" aria-pressed="false"><span>${i + 1}</span>${esc(p.name)}</button>`).join("")}</div>
+  <div class="fig-guide-info" data-guide-info hidden aria-live="polite"><b data-guide-name></b><p data-guide-text></p></div>
+  <script type="application/json">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>
+</div>`;
+};
+const figBlock = (name) => (figures[name] ? `<div class="fig-wrap">${figures[name].html}${guidePanel(name)}</div>` : "");
 const kitSource = readFileSync(join(ROOT, "kit/iso-kit.mjs"), "utf8").replace(/^export /gm, "");
 const figuresJs = `(function () {
 "use strict";
@@ -120,6 +147,7 @@ ${math ? `<link rel="stylesheet" href="${KATEX}/katex.min.css">` : ""}
 ${math ? `<script defer src="${KATEX}/katex.min.js"></script><script defer src="${KATEX}/contrib/auto-render.min.js"></script>` : ""}
 <script src="assets/search.js" defer></script>
 <script src="assets/site.js" defer></script>
+<script src="assets/guide.js" defer></script>
 ${figs ? `<script src="assets/figures.js" defer></script>` : ""}
 </body>
 </html>`;
@@ -142,7 +170,7 @@ function chapterPage(c, i) {
   // Wrap any bare table so it scrolls on its own instead of widening the page.
   let body = c.body.replace(/(<div class="table">\s*)?(<table[\s\S]*?<\/table>)/g, (m, wrap, table) => (wrap ? m : `<div class="table">${table}</div>`));
   const used = [];
-  body = body.replace(/<!--FIG:(\w+)-->/g, (_, name) => { if (!figures[name]) return ""; used.push(name); return `<div class="fig-wrap">${figures[name].html}</div>`; });
+  body = body.replace(/<!--FIG:(\w+)-->/g, (_, name) => { if (!figures[name]) return ""; used.push(name); return figBlock(name); });
   const prev = chapters[i - 1], next = chapters[i + 1];
   const toc = `<div class="toc-label">В главе</div><ol>${c.toc.map((t) => `<li><a href="#${t.id}">${esc(t.title)}</a></li>`).join("")}
     ${c.keypoints.length ? '<li><a href="#keypoints">Главное</a></li>' : ""}${c.quiz.length ? '<li><a href="#quiz">Тест</a></li>' : ""}${c.exam.length ? '<li><a href="#exam">Вопросы к экзамену</a></li>' : ""}${c.glossary.length ? '<li><a href="#terms">Термины</a></li>' : ""}${c.refs.length ? '<li><a href="#refs">Литература</a></li>' : ""}</ol>`;
@@ -152,6 +180,7 @@ function chapterPage(c, i) {
     <div class="ch-kicker"><span>Глава ${c.num}</span><span>≈ ${c.minutes} мин чтения</span><span>${c.quiz.length} вопросов теста</span></div>
     <h1>${esc(c.title)}</h1>
     <p class="lead">${esc(c.lead)}</p>
+    ${CH_GUIDE[c.num] ? `<div class="ch-audio" data-ch-audio="${audio("ch-" + c.num) || ""}" data-ch-text="${esc(CH_GUIDE[c.num])}"><button type="button" aria-label="Слушать аудиогид">▶</button><div class="ch-audio-body"><b>Аудиогид к главе</b><span class="ch-audio-track"><span data-ch-bar></span></span></div><span class="ch-audio-time" data-ch-time>${esc(VOICE.name.split(" ")[0])} · ElevenLabs</span></div>` : ""}
   </header>
   <div class="prose">${body}</div>
   ${c.keypoints.length ? `<section class="block keypoints" id="keypoints"><h2>Главное в главе</h2><ul>${c.keypoints.map((k) => `<li>${k}</li>`).join("")}</ul></section>` : ""}
@@ -181,7 +210,7 @@ function indexPage() {
     <dl class="stats"><div><dt>${Math.round(total / 1000)} тыс.</dt><dd>слов учебного текста</dd></div><div><dt>${q}</dt><dd>тестовых вопросов</dd></div><div><dt>${terms}</dt><dd>терминов</dd></div></dl>
   </div>
 </section>
-${figures.core ? `<div class="fig-wrap hero-fig">${figures.core.html}</div>` : ""}
+${figures.core ? figBlock("core").replace('class="fig-wrap"', 'class="fig-wrap hero-fig"') : ""}
 <section class="block">
   <h2>Программа курса</h2>
   <ol class="course">
@@ -271,7 +300,7 @@ function figuresPage() {
   const where = { binding: "02", decay: "03", shielding: "04", chain: "05", core: "06", fuel: "07", loop: "09" };
   const main = `
 <header class="ch-head"><div class="ch-kicker"><span>Галерея</span><span>${FIG_NAMES.length} моделей</span></div><h1>Интерактивные модели</h1><p class="lead">Все фигуры курса на одной странице. Каждая — небольшой прибор на верстаке: числа в правом нижнем углу считаются той же моделью, что двигает детали.</p></header>
-${FIG_NAMES.map((n) => `<div class="fig-wrap">${figures[n].html}<p class="fig-from">Из главы <a href="${chapters.find((c) => c.num === where[n])?.href || "#"}">${where[n]}. ${esc(chapters.find((c) => c.num === where[n])?.title || "")}</a></p></div>`).join("")}`;
+${FIG_NAMES.map((n) => `<div class="fig-wrap">${figures[n].html}${guidePanel(n)}<p class="fig-from">Из главы <a href="${chapters.find((c) => c.num === where[n])?.href || "#"}">${where[n]}. ${esc(chapters.find((c) => c.num === where[n])?.title || "")}</a></p></div>`).join("")}`;
   return page({ title: `Интерактивные модели — ${SITE}`, active: "figures", main, figs: true, math: false });
 }
 
@@ -281,6 +310,8 @@ mkdirSync(join(OUT, "assets"), { recursive: true });
 writeFileSync(join(OUT, "assets/site.css"), ISO_CSS + readFileSync(join(ROOT, "src/site.css"), "utf8"));
 copyFileSync(join(ROOT, "src/site.js"), join(OUT, "assets/site.js"));
 cpSync(join(ROOT, "vendor/katex"), join(OUT, "assets/katex"), { recursive: true });
+cpSync(join(ROOT, "src/audio"), join(OUT, "assets/audio"), { recursive: true });
+copyFileSync(join(ROOT, "src/guide.js"), join(OUT, "assets/guide.js"));
 writeFileSync(join(OUT, "assets/figures.js"), figuresJs);
 const search = [];
 for (const c of chapters) {
