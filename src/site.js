@@ -84,6 +84,9 @@
     window.addEventListener("load", start);
   }
 
+  // Map: country buttons highlight that country's plants on the map figure.
+  document.querySelectorAll("[data-country]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new CustomEvent("map:country", { detail: b.dataset.country }))));
+
   // Filters
   $$("[data-filter]").forEach((input) => input.addEventListener("input", () => {
     const q = input.value.trim().toLowerCase();

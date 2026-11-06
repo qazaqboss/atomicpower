@@ -258,3 +258,29 @@ sup,sub{line-height:0}
 .fig-heat{fill:var(--anatomy-red);stroke:none;opacity:.6}
 .fig-plasma{fill:none;stroke-linecap:round}
 .fig-flowdots circle{fill:var(--anatomy-blue)}
+
+/* ---------- world map table ---------- */
+.fig-land{fill:var(--anatomy-shade-3);stroke:var(--anatomy-lo);stroke-width:.5;stroke-linejoin:round}
+.fig-land-nuc{fill:var(--anatomy-top);stroke:var(--anatomy-mid)}
+.fig-pin .iso-edge{stroke:var(--anatomy-lo)}
+.fig-pin[data-st="op"] .iso-top,.fig-pin[data-st="op"] .iso-shade{fill:var(--anatomy-green)}
+.fig-pin[data-st="op"] .iso-edge{stroke:var(--anatomy-green)}
+.fig-pin[data-st="uc"] .iso-top,.fig-pin[data-st="uc"] .iso-shade{fill:var(--anatomy-blue)}
+.fig-pin[data-st="uc"] .iso-edge{stroke:var(--anatomy-blue)}
+.fig-pin[data-st="pl"] .iso-edge,.fig-pin[data-st="so"] .iso-edge{stroke:#e0b25b}
+.fig-pin[data-st="pl"] .iso-top,.fig-pin[data-st="so"] .iso-top{fill:#e0b25b}
+.fig-pin[data-hot] .iso-edge,.fig-iaea[data-hot] .iso-edge{stroke:var(--anatomy-lit);stroke-width:1.2}
+.fig-pin[data-dim]{opacity:.12}
+.fig-cursor{fill:none;stroke:var(--anatomy-lit);stroke-width:1;vector-effect:non-scaling-stroke;pointer-events:none}
+.dot{display:inline-block;width:9px;height:9px;margin-right:6px;border-radius:50%;background:var(--anatomy-lo);vertical-align:0}
+.dot[data-st="op"]{background:var(--anatomy-green)}.dot[data-st="uc"]{background:var(--anatomy-blue)}.dot[data-st="pl"],.dot[data-st="so"]{background:#e0b25b}.dot[data-st="iaea"]{background:var(--anatomy-strong);border-radius:2px}
+.map-info{margin-top:14px;padding:12px 16px;border:1px solid var(--line);border-radius:10px;background:var(--anatomy-page);font-size:14px;line-height:1.55;max-height:220px;overflow:auto}
+.map-info b{display:block;color:var(--anatomy-strong);font-weight:600}
+.map-info b small{font-weight:400;color:var(--anatomy-muted);margin-left:6px}
+.map-info ul{margin:6px 0 0;padding:0;list-style:none;columns:2 240px;column-gap:24px}
+.map-info li{break-inside:avoid;margin:2px 0}
+.map-info span{color:var(--anatomy-muted)}
+.country-table td:first-child{white-space:nowrap}
+.country-table button{all:unset;cursor:pointer;color:var(--accent)}
+.country-table button:hover{text-decoration:underline}
+.iaea-list{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:6px}

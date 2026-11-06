@@ -15,13 +15,14 @@ const SITE = "Атом от А до Я";
 const KATEX = "assets/katex"; // vendored KaTeX 0.16.9 (MIT), see vendor/katex
 
 // ---------- figures ----------
-const FIG_NAMES = ["pile", "binding", "decay", "shielding", "chain", "core", "fuel", "loop", "barriers", "dose", "cask", "tokamak", "isl"].filter((n) => {
+const FIG_NAMES = ["worldmap", "leubank", "pile", "binding", "decay", "shielding", "chain", "core", "fuel", "loop", "barriers", "dose", "cask", "tokamak", "isl"].filter((n) => {
   try { readFileSync(join(ROOT, "figures", n + ".mjs")); return true; } catch { return false; }
 });
 const figures = {};
+const MAPMOD = await import("./figures/worldmap.mjs");
 for (const name of FIG_NAMES) figures[name] = (await import(`./figures/${name}.mjs`)).build();
 const audio = (name) => (existsSync(join(ROOT, "src/audio", name + ".mp3")) ? `assets/audio/${name}.mp3` : null);
-const TITLES = { pile: "Чикагская поленница CP-1", barriers: "Барьеры безопасности", dose: "Время, расстояние, экран", cask: "Сухое хранение ОЯТ", tokamak: "Токамак ИТЭР", isl: "Скважинное выщелачивание", binding: "Энергия связи", decay: "Закон распада", shielding: "Защита от излучений", chain: "Цепная реакция", core: "Управление реактором", fuel: "Твэл и ТВС", loop: "Энергоблок ВВЭР-1000" };
+const TITLES = { worldmap: "Атомные станции мира", leubank: "Банк НОУ МАГАТЭ", pile: "Чикагская поленница CP-1", barriers: "Барьеры безопасности", dose: "Время, расстояние, экран", cask: "Сухое хранение ОЯТ", tokamak: "Токамак ИТЭР", isl: "Скважинное выщелачивание", binding: "Энергия связи", decay: "Закон распада", shielding: "Защита от излучений", chain: "Цепная реакция", core: "Управление реактором", fuel: "Твэл и ТВС", loop: "Энергоблок ВВЭР-1000" };
 const guidePanel = (name) => {
   const g = GUIDE[name];
   if (!g) return "";
@@ -36,7 +37,7 @@ const guidePanel = (name) => {
     <button type="button" class="fig-guide-main" data-guide-tour aria-pressed="false">▶ Экскурсия с гидом</button>
     <button type="button" data-guide-apart aria-pressed="false">Разобрать</button>
     <button type="button" data-guide-inspect aria-pressed="false">Осмотр деталей</button>
-    <span class="fig-guide-voice">Голос: ElevenLabs</span>
+    <span class="fig-guide-voice">${data.introSrc ? "Голос: ElevenLabs" : "Голос: синтез речи браузера"}</span>
   </div>
   <div class="fig-guide-parts" role="list" aria-label="Детали модели">${g.parts.map((p, i) => `<button type="button" role="listitem" data-guide-part="${p.id}" aria-pressed="false"><span>${i + 1}</span>${esc(p.name)}</button>`).join("")}</div>
   <div class="fig-guide-info" data-guide-info hidden aria-live="polite"><b data-guide-name></b><p data-guide-text></p></div>
@@ -108,6 +109,7 @@ const navHtml = (active) => `
     <li><a href="exam.html"${active === "exam" ? ' aria-current="page"' : ""}><span class="side-num">✓</span><span>Тренажёр и билеты</span></a></li>
     <li><a href="formulas.html"${active === "formulas" ? ' aria-current="page"' : ""}><span class="side-num">ƒ</span><span>Формулы и константы</span></a></li>
     <li><a href="glossary.html"${active === "glossary" ? ' aria-current="page"' : ""}><span class="side-num">Аа</span><span>Глоссарий</span></a></li>
+    <li><a href="map.html"${active === "map" ? ' aria-current="page"' : ""}><span class="side-num">◎</span><span>Карта АЭС мира</span></a></li>
     <li><a href="figures.html"${active === "figures" ? ' aria-current="page"' : ""}><span class="side-num">◇</span><span>Интерактивные модели</span></a></li>
     <li><a href="refs.html"${active === "refs" ? ' aria-current="page"' : ""}><span class="side-num">§</span><span>Литература</span></a></li>
   </ul>
@@ -297,11 +299,54 @@ ${FORMULAS.map((g) => `<section class="block formulas"><h2>${g.title}${g.ch ? ` 
 }
 
 function figuresPage() {
-  const where = { pile: "01", barriers: "10", dose: "11", cask: "12", tokamak: "13", isl: "14", binding: "02", decay: "03", shielding: "04", chain: "05", core: "06", fuel: "07", loop: "09" };
+  const where = { worldmap: "15", leubank: "15", pile: "01", barriers: "10", dose: "11", cask: "12", tokamak: "13", isl: "14", binding: "02", decay: "03", shielding: "04", chain: "05", core: "06", fuel: "07", loop: "09" };
   const main = `
 <header class="ch-head"><div class="ch-kicker"><span>Галерея</span><span>${FIG_NAMES.length} моделей</span></div><h1>Интерактивные модели</h1><p class="lead">Все фигуры курса на одной странице. Каждая — небольшой прибор на верстаке: числа в правом нижнем углу считаются той же моделью, что двигает детали.</p></header>
 ${FIG_NAMES.map((n) => `<div class="fig-wrap">${figures[n].html}${guidePanel(n)}<p class="fig-from">Из главы <a href="${chapters.find((c) => c.num === where[n])?.href || "#"}">${where[n]}. ${esc(chapters.find((c) => c.num === where[n])?.title || "")}</a></p></div>`).join("")}`;
   return page({ title: `Интерактивные модели — ${SITE}`, active: "figures", main, figs: true, math: false });
+}
+
+function mapPage() {
+  const { COUNTRY_RU, IAEA_SITES } = MAPMOD;
+  const data = JSON.parse(readFileSync(join(ROOT, "src/data/plants.json"), "utf8"));
+  const rows = {};
+  for (const site of data.sites) {
+    const r = (rows[site.c] ||= { c: site.c, sites: 0, op: 0, gw: 0, uc: 0, pl: 0, sd: 0 });
+    r.sites++;
+    for (const u of site.u) {
+      if (u[1] === "op") { r.op++; r.gw += (u[4] || 0) / 1000; }
+      else if (u[1] === "uc") r.uc++;
+      else if (u[1] === "pl") r.pl++;
+      else r.sd++;
+    }
+  }
+  const list = Object.values(rows).sort((a, b) => b.gw - a.gw || b.op - a.op || b.uc - a.uc);
+  const st = figures.worldmap.stats;
+  const main = `
+<header class="ch-head"><div class="ch-kicker"><span>Атлас</span><span>${st.sites} площадок</span><span>${st.op} работающих блоков</span></div><h1>Карта АЭС мира</h1>
+<p class="lead">Все атомные станции мира на одном столе: работающие, строящиеся, планируемые и остановленные, а также офисы и лаборатории МАГАТЭ. Наведите курсор на штырёк, чтобы увидеть станцию и её энергоблоки; кнопками отфильтруйте статус.</p></header>
+${figBlock("worldmap")}
+<section class="block">
+  <h2>Страны с атомной энергетикой <span class="count">${list.length} стран</span></h2>
+  <p>Нажмите на страну, чтобы выделить её станции на карте. Мощность — сумма установленной мощности работающих блоков по базе данных.</p>
+  <div class="table country-table"><table><thead><tr><th>Страна</th><th>Площадок</th><th>Работают</th><th>ГВт</th><th>Строятся</th><th>Планируются</th><th>Остановлены и др.</th></tr></thead><tbody>
+  ${list.map((r) => `<tr><td><button type="button" data-country="${r.c}">${esc(COUNTRY_RU[r.c] || data.countries[r.c] || r.c)}</button></td><td>${r.sites}</td><td>${r.op}</td><td>${r.gw.toFixed(1).replace(".", ",")}</td><td>${r.uc}</td><td>${r.pl}</td><td>${r.sd}</td></tr>`).join("")}
+  <tr><td><button type="button" data-country="">Показать все</button></td><td>${st.sites}</td><td>${st.op}</td><td>${st.gw.toFixed(0)}</td><td colspan="3"></td></tr>
+  </tbody></table></div>
+</section>
+<section class="block">
+  <h2>Объекты МАГАТЭ на карте</h2>
+  <ul class="iaea-list">${IAEA_SITES.map((p) => `<li><span class="dot" data-st="iaea"></span>${esc(p.n)}</li>`).join("")}</ul>
+  <p>Подробнее о структуре, функциях и истории агентства — в главе <a href="15-iaea.html">«МАГАТЭ и международное регулирование»</a>.</p>
+</section>
+<section class="block refs">
+  <h2>Данные</h2>
+  <ol>
+    <li>GeoNuclearData — открытая база атомных электростанций мира (Cristian Stoica), версия набора данных 0.17.17 от 3 марта 2024 г., лицензия <a href="https://opendatacommons.org/licenses/odbl/1-0/">ODbL 1.0</a>. <a href="https://github.com/cristianst85/GeoNuclearData">github.com/cristianst85/GeoNuclearData</a>. Источники базы — WNA и IAEA PRIS. Статусы приведены на дату обновления базы; актуальные данные — в <a href="https://pris.iaea.org">IAEA PRIS</a>.</li>
+    <li>Береговые линии и границы стран — <a href="https://www.naturalearthdata.com/">Natural Earth</a>, масштаб 1:110 млн (общественное достояние).</li>
+  </ol>
+</section>`;
+  return page({ title: `Карта АЭС мира — ${SITE}`, active: "map", main, figs: true, math: false, description: "Интерактивная карта всех атомных электростанций мира и объектов МАГАТЭ." });
 }
 
 // ---------- write ----------
@@ -332,5 +377,6 @@ writeFileSync(join(OUT, "glossary.html"), glossaryPage());
 writeFileSync(join(OUT, "refs.html"), refsPage());
 writeFileSync(join(OUT, "formulas.html"), formulasPage());
 writeFileSync(join(OUT, "figures.html"), figuresPage());
+writeFileSync(join(OUT, "map.html"), mapPage());
 writeFileSync(join(OUT, ".nojekyll"), "");
 console.log(`built ${chapters.length} chapters, ${FIG_NAMES.length} figures, ${chapters.reduce((s, c) => s + c.words, 0)} words, ${chapters.reduce((s, c) => s + c.quiz.length, 0)} quiz questions`);
