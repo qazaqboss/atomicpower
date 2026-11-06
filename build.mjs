@@ -118,6 +118,7 @@ ${math ? `<link rel="stylesheet" href="${KATEX}/katex.min.css">` : ""}
 </div>
 <footer class="foot"><div>${SITE} — учебный курс по атомной энергетике. Интерактивные фигуры построены на открытом наборе <a href="https://github.com/wheresryan22/anatomy">Anatomy</a> (MIT).</div><div>Числа в тексте и моделях — справочные; перед экзаменом сверяйтесь с вашим учебником и программой курса.</div></footer>
 ${math ? `<script defer src="${KATEX}/katex.min.js"></script><script defer src="${KATEX}/contrib/auto-render.min.js"></script>` : ""}
+<script src="assets/search.js" defer></script>
 <script src="assets/site.js" defer></script>
 ${figs ? `<script src="assets/figures.js" defer></script>` : ""}
 </body>
@@ -292,7 +293,7 @@ for (const c of chapters) {
   }
   for (const g of c.glossary) search.push({ t: strip(g.term), u: `${c.href}#terms`, s: `Термин · гл. ${c.num}`, b: strip(g.def) });
 }
-writeFileSync(join(OUT, "assets/search.json"), JSON.stringify(search));
+writeFileSync(join(OUT, "assets/search.js"), "window.SEARCH_INDEX = " + JSON.stringify(search).replace(/</g, "\\u003c") + ";\n");
 writeFileSync(join(OUT, "index.html"), indexPage());
 chapters.forEach((c, i) => writeFileSync(join(OUT, c.href), chapterPage(c, i)));
 writeFileSync(join(OUT, "exam.html"), examPage());

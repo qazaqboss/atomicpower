@@ -108,7 +108,7 @@
   // Search
   const input = $("[data-search]"), results = $("[data-results]");
   let index = null, sel = -1;
-  const load = () => index || (index = fetch("assets/search.json").then((r) => r.json()).catch(() => []));
+  const load = () => index || (index = Promise.resolve(window.SEARCH_INDEX || []));
   const escape = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
   const hl = (t, words) => { let s = escape(t); words.forEach((w) => { s = s.replace(new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi"), "<mark>$1</mark>"); }); return s; };
   async function search() {
