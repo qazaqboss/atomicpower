@@ -1,48 +1,73 @@
-// Voice guide and part inspector for every figure, plus the chapter audio player.
-// Each figure has a [data-guide-for] panel with its parts as JSON. Parts in the SVG carry
-// data-part ids; "taking apart" lifts each part along world z with the CSS `translate`
-// property, which composes with the transforms the figure's own live code writes.
+// Voice guide: figure tours and part inspector, chapter audio, and the learning autopilot that
+// walks through the whole site — it reads each section aloud, highlights and scrolls to what it
+// reads, runs the figure tours, pauses at the quiz, then moves on to the next chapter in place.
+// Parts in the SVG carry data-part ids; "taking apart" lifts each part along world z with the CSS
+// `translate` property, which composes with the transforms the figure's own live code writes.
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const still = matchMedia("(prefers-reduced-motion: reduce)");
-
-  // One voice at a time across the page.
-  let current = null; // { stop() }
-  const stopAll = () => { if (current) { const c = current; current = null; c.stop(); } };
-
-  const ruVoice = () => {
-    try { return speechSynthesis.getVoices().find((v) => /^ru/i.test(v.lang)) || null; } catch (e) { return null; }
+  const store = {
+    get(k, f) { try { const v = localStorage.getItem(k); return v === null ? f : JSON.parse(v); } catch (e) { return f; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   };
-  // Plays an mp3; if it is missing or fails, falls back to the browser's speech synthesis,
-  // and if that is unavailable too, waits as long as the text would take to read.
+  const prefs = Object.assign({ mode: "full", rate: 1 }, store.get("pilot-prefs", {}));
+
+  // ---------- speech: one voice at a time across the page ----------
+  let current = null;
+  const stopAll = () => { if (current) { const c = current; current = null; c.stop(); } };
+  const ruVoice = () => { try { return speechSynthesis.getVoices().find((v) => /^ru/i.test(v.lang)) || null; } catch (e) { return null; } };
+  // Long texts are spoken sentence by sentence: some browsers cut a single long utterance short.
+  const chunks = (text) => {
+    const parts = text.replace(/\s+/g, " ").trim().match(/[^.!?…]+[.!?…]*\s*/g) || [text];
+    const out = [];
+    let buf = "";
+    for (const p of parts) { if ((buf + p).length > 220 && buf) { out.push(buf); buf = p; } else buf += p; }
+    if (buf.trim()) out.push(buf);
+    return out;
+  };
   function speak({ src, text, onend, onstop }) {
     stopAll();
-    let done = false, audio = null, timer = 0, utter = null;
+    let done = false, audio = null, timer = 0, speaking = false;
     const finish = () => { if (done) return; done = true; clearTimeout(timer); if (current === handle) current = null; onend && onend(); };
     const handle = {
-      stop() { const was = done; done = true; clearTimeout(timer); if (!was && onstop) onstop(); if (audio) { audio.pause(); audio.src = ""; } try { if (utter) speechSynthesis.cancel(); } catch (e) {} },
+      stop() { const was = done; done = true; clearTimeout(timer); if (!was && onstop) onstop(); if (audio) { audio.pause(); audio.src = ""; } try { if (speaking) speechSynthesis.cancel(); } catch (e) {} },
       audio: () => audio,
     };
     current = handle;
     const fallback = () => {
       if (done) return;
       try {
-        if ("speechSynthesis" in window) {
-          utter = new SpeechSynthesisUtterance(text);
-          utter.lang = "ru-RU";
-          const v = ruVoice(); if (v) utter.voice = v;
-          utter.rate = 1.02;
-          utter.onend = finish; utter.onerror = finish;
-          speechSynthesis.speak(utter);
+        if ("speechSynthesis" in window && text) {
+          const list = chunks(text);
+          speaking = true;
+          speechSynthesis.cancel();
+          const next = (i) => {
+            if (done) return;
+            if (i >= list.length) return finish();
+            const u = new SpeechSynthesisUtterance(list[i]);
+            u.lang = "ru-RU";
+            const v = ruVoice(); if (v) u.voice = v;
+            u.rate = 1.02 * prefs.rate;
+            let moved = false;
+            const go = () => { if (moved) return; moved = true; clearTimeout(timer); next(i + 1); };
+            u.onend = go;
+            u.onerror = go;
+            // Some browsers never report the end of an utterance: move on after a generous estimate.
+            clearTimeout(timer);
+            timer = setTimeout(go, 2500 + (list[i].length * 95) / prefs.rate);
+            speechSynthesis.speak(u);
+          };
+          next(0);
           return;
         }
       } catch (e) {}
-      timer = setTimeout(finish, Math.max(2500, text.length * 65));
+      timer = setTimeout(finish, Math.max(1500, (text || "").length * 60 / prefs.rate));
     };
     if (src) {
       audio = new Audio(src);
       audio.preload = "auto";
+      audio.playbackRate = prefs.rate;
       audio.addEventListener("ended", finish);
       audio.addEventListener("error", () => { audio = null; fallback(); });
       audio.play().catch(() => { audio = null; fallback(); });
@@ -51,7 +76,9 @@
   }
 
   // ---------- figures ----------
-  $$("[data-guide-for]").forEach((panel) => {
+  function initFigurePanel(panel) {
+    if (panel.__ready) return;
+    panel.__ready = true;
     const data = JSON.parse($("script[type='application/json']", panel).textContent);
     const root = document.getElementById("fig-" + data.name);
     if (!root) return;
@@ -66,9 +93,8 @@
     const chips = $$("[data-guide-part]", panel);
     const byId = Object.fromEntries(data.parts.map((p) => [p.id, p]));
     const groups = (id) => $$(`[data-part="${id}"]`, svg);
-    const [ux, uy] = data.up; // screen vector of one world unit up
+    const [ux, uy] = data.up;
 
-    // Explode animation.
     let apart = 0, target = 0, raf = 0, last = 0;
     const apply = () => {
       for (const p of data.parts) {
@@ -76,7 +102,6 @@
         const t = dz ? `${(ux * dz).toFixed(2)}px ${(uy * dz).toFixed(2)}px` : "";
         for (const g of groups(p.id)) g.style.translate = t;
       }
-      // Make room above: shrink the drawing toward its base while it is apart.
       svg.style.transformOrigin = "50% 100%";
       svg.style.transform = apart ? `scale(${(1 - 0.2 * apart).toFixed(3)})` : "";
     };
@@ -95,7 +120,6 @@
       if (!raf) { last = 0; raf = requestAnimationFrame(tick); }
     };
 
-    // Focus: highlight one part (and its ancestors), dim the rest.
     let focused = null;
     const focus = (id) => {
       focused = id;
@@ -115,49 +139,44 @@
       info.hidden = false;
     };
 
-    // Tour: intro, then every part in turn, taken apart, with its narration.
-    let touring = false, step = -1;
+    let touring = false, onDone = null;
     const endTour = () => {
-      touring = false; step = -1;
+      touring = false;
       btnTour.textContent = "▶ Экскурсия с гидом";
       btnTour.setAttribute("aria-pressed", "false");
       panel.removeAttribute("data-speaking");
     };
     const play = (i) => {
-      step = i;
-      if (i >= data.parts.length) { endTour(); focus(null); setApart(false); return; }
+      if (i >= data.parts.length) { endTour(); focus(null); setApart(false); const cb = onDone; onDone = null; cb && cb(); return; }
       if (i < 0) {
         focus(null);
         infoName.textContent = data.title; infoText.textContent = data.intro; info.hidden = false;
-        speak({ src: data.introSrc, text: data.intro, onend: () => touring && play(0), onstop: endTour });
+        speak({ src: data.introSrc, text: data.intro, onend: () => touring && play(0), onstop: () => { onDone = null; endTour(); } });
       } else {
         const p = data.parts[i];
         if (!apart) setApart(true);
         focus(p.id);
-        speak({ src: p.src, text: p.text, onend: () => touring && play(i + 1), onstop: endTour });
+        speak({ src: p.src, text: p.text, onend: () => touring && play(i + 1), onstop: () => { onDone = null; endTour(); } });
       }
     };
-    btnTour.addEventListener("click", () => {
-      if (touring) { stopAll(); focus(null); return; }
+    const startTour = (cb) => {
+      onDone = cb || null;
       touring = true;
       btnTour.textContent = "■ Остановить";
       btnTour.setAttribute("aria-pressed", "true");
       panel.setAttribute("data-speaking", "");
       play(-1);
-    });
+    };
+    btnTour.addEventListener("click", () => { if (touring) { stopAll(); focus(null); return; } startTour(); });
     btnApart.addEventListener("click", () => setApart(target === 0));
-
-    // Part chips: take apart, focus and narrate one part.
     chips.forEach((c) => c.addEventListener("click", () => {
       const id = c.dataset.guidePart;
       if (touring) endTour();
       if (!apart) setApart(true);
       focus(id);
-      const p = byId[id];
-      speak({ src: p.src, text: p.text });
+      speak({ src: byId[id].src, text: byId[id].text });
     }));
 
-    // Inspect mode: hovering a part names it; the figure's own steering pauses meanwhile.
     let inspecting = false;
     const partAt = (e) => { const g = e.target.closest && e.target.closest("[data-part]"); return g ? g.getAttribute("data-part") : null; };
     const guard = (e) => {
@@ -174,10 +193,17 @@
       if (!inspecting) focus(null);
       else { infoName.textContent = "Осмотр деталей"; infoText.textContent = "Наведите курсор или коснитесь детали, чтобы узнать, что это. Щелчок — озвучить."; info.hidden = false; }
     });
-  });
 
-  // ---------- chapter audio ----------
-  $$("[data-ch-audio]").forEach((box) => {
+    // Used by the autopilot: the full tour, or just the introduction.
+    panel.__tour = (cb, short) => {
+      if (short) { infoName.textContent = data.title; infoText.textContent = data.intro; info.hidden = false; speak({ src: data.introSrc, text: data.intro, onend: () => { info.hidden = true; cb && cb(); } }); }
+      else startTour(cb);
+    };
+  }
+
+  function initChapterAudio(box) {
+    if (box.__ready) return;
+    box.__ready = true;
     const btn = $("button", box), bar = $("[data-ch-bar]", box), time = $("[data-ch-time]", box);
     const src = box.dataset.chAudio, text = box.dataset.chText || "";
     let handle = null, raf = 0;
@@ -194,5 +220,187 @@
       btn.textContent = "■"; btn.setAttribute("aria-label", "Остановить"); box.setAttribute("data-playing", "");
       loopBar();
     });
+  }
+
+  function initPanels(scope) {
+    $$("[data-guide-for]", scope).forEach(initFigurePanel);
+    $$("[data-ch-audio]", scope).forEach(initChapterAudio);
+    $$("[data-pilot-start]", scope).forEach((b) => { if (b.__ready) return; b.__ready = true; b.addEventListener("click", () => pilot.start()); });
+  }
+  initPanels(document);
+
+  // ---------- readable text from page content ----------
+  const TEX = [[/\\lambda/g, " лямбда "], [/\\Lambda/g, " лямбда "], [/\\Sigma|\\sigma/g, " сигма "], [/\\varphi|\\phi/g, " фи "], [/\\rho/g, " ро "], [/\\beta/g, " бета "], [/\\eta/g, " эта "], [/\\varepsilon|\\epsilon/g, " эпсилон "], [/\\mu/g, " мю "], [/\\tau/g, " тау "], [/\\nu/g, " ню "], [/\\xi/g, " кси "], [/\\Delta|\\delta/g, " дельта "], [/\\gamma|\\Gamma/g, " гамма "], [/\\alpha/g, " альфа "], [/\\theta/g, " тэта "], [/\\pi/g, " пи "], [/\\infty/g, " бесконечность "], [/\\approx/g, " примерно "], [/\\cdot|\\times/g, " на "], [/\^\{?2\}?/g, " в квадрате "], [/\^\{?3\}?/g, " в кубе "], [/\{,\}/g, ","], [/\\[a-zA-Z]+/g, " "], [/[{}_^\\]/g, " "]];
+  const readTex = (tex) => TEX.reduce((s, [a, b]) => s.replace(a, b), tex).replace(/\s+/g, " ").trim();
+  function readable(el) {
+    const c = el.cloneNode(true);
+    c.querySelectorAll(".katex-display, .fig-wrap, script, style, .quiz-explain").forEach((n) => n.remove());
+    c.querySelectorAll(".katex").forEach((k) => {
+      const tex = (k.querySelector("annotation") || {}).textContent || "";
+      k.replaceWith(document.createTextNode(tex.length && tex.length <= 16 ? " " + readTex(tex) + " " : " (см. формулу) "));
+    });
+    return c.textContent.replace(/\s+/g, " ").replace(/\\\(|\\\)|\\\[|\\\]/g, "").trim();
+  }
+
+  // ---------- autopilot ----------
+  const dock = document.createElement("div");
+  dock.className = "pilot";
+  dock.innerHTML = `<div class="pilot-orb" aria-hidden="true"><span></span></div>
+    <div class="pilot-body"><b data-pilot-title>Обучение с гидом</b><span data-pilot-text>Гид проведёт по курсу: прочитает главы, покажет модели и остановится перед тестами.</span></div>
+    <div class="pilot-ctrl">
+      <button type="button" data-pilot-play aria-label="Начать">▶</button>
+      <button type="button" data-pilot-next aria-label="Дальше" title="Дальше">⏭</button>
+      <button type="button" data-pilot-stop aria-label="Остановить" title="Остановить">■</button>
+      <button type="button" data-pilot-mode title="Режим чтения"></button>
+      <button type="button" data-pilot-rate title="Скорость речи"></button>
+      <button type="button" data-pilot-min aria-label="Свернуть" title="Свернуть">–</button>
+    </div>`;
+  document.body.appendChild(dock);
+  const pointer = document.createElement("div");
+  pointer.className = "pilot-pointer";
+  pointer.setAttribute("aria-hidden", "true");
+  document.body.appendChild(pointer);
+  const ui = { title: $("[data-pilot-title]", dock), text: $("[data-pilot-text]", dock), play: $("[data-pilot-play]", dock), next: $("[data-pilot-next]", dock), stop: $("[data-pilot-stop]", dock), mode: $("[data-pilot-mode]", dock), rate: $("[data-pilot-rate]", dock), min: $("[data-pilot-min]", dock) };
+  const RATES = [0.85, 1, 1.15, 1.3, 1.5];
+  const syncPrefs = () => {
+    ui.mode.textContent = prefs.mode === "full" ? "Полностью" : "Главное";
+    ui.rate.textContent = String(prefs.rate).replace(".", ",") + "×";
+    store.set("pilot-prefs", prefs);
+  };
+  syncPrefs();
+
+  const pilot = (() => {
+    let steps = [], idx = 0, state = "idle", lit = null; // idle | playing | paused | waiting
+    const setState = (s) => { state = s; dock.dataset.state = s; ui.play.textContent = s === "playing" ? "⏸" : "▶"; ui.play.setAttribute("aria-label", s === "playing" ? "Пауза" : "Продолжить"); };
+    const highlight = (el) => {
+      if (lit) lit.classList.remove("pilot-reading");
+      lit = el;
+      if (!el) { pointer.classList.remove("on"); return; }
+      el.classList.add("pilot-reading");
+      el.scrollIntoView({ behavior: still.matches ? "auto" : "smooth", block: el.offsetHeight > innerHeight * 0.7 ? "start" : "center" });
+      const r = el.getBoundingClientRect();
+      pointer.style.top = (r.top + scrollY + 6) + "px";
+      pointer.style.left = Math.max(8, r.left + scrollX - 30) + "px";
+      pointer.classList.add("on");
+    };
+    const say = (title, text) => { ui.title.textContent = title; ui.text.textContent = text.length > 160 ? text.slice(0, 157) + "…" : text; };
+
+    // Build the walk for the current page.
+    function plan() {
+      const main = $(".main");
+      const out = [];
+      const chTitle = ($("h1", main) || {}).textContent || document.title;
+      const audio = $("[data-ch-audio]", main);
+      const head = $(".ch-head, .hero", main);
+      if (audio) out.push({ el: head, title: chTitle, text: audio.dataset.chText, src: audio.dataset.chAudio || null });
+      else if (head) { const lead = $(".lead", head); out.push({ el: head, title: chTitle, text: chTitle + ". " + (lead ? readable(lead) : "") }); }
+      const prose = $(".prose", main) || main;
+      let section = "", firstInSection = false;
+      const full = prefs.mode === "full";
+      const children = [...prose.children].filter((n) => !n.matches(".ch-head, .hero, script"));
+      for (const n of children) {
+        if (n.matches("h2")) { section = n.textContent; firstInSection = true; out.push({ el: n, title: section, text: "Раздел: " + section + "." }); continue; }
+        if (n.matches(".fig-wrap")) { const panel = $("[data-guide-for]", n); if (panel) out.push({ el: n, title: "Модель", text: "Посмотрим на модель.", panel }); continue; }
+        if (n.matches("h3")) { if (full) out.push({ el: n, title: section, text: n.textContent + "." }); continue; }
+        if (n.matches(".table")) { if (full) out.push({ el: n, title: section, text: "Посмотрите на таблицу — в ней собраны основные числа этого раздела.", pause: 1500 }); continue; }
+        if (n.matches(".block")) continue;
+        const t = readable(n);
+        if (!t || t.length < 3) continue;
+        const important = n.matches(".def, .note, .example");
+        if (full || important || (firstInSection && n.matches("p"))) out.push({ el: n, title: section || chTitle, text: t });
+        if (n.matches("p")) firstInSection = false;
+      }
+      const keys = $(".keypoints", main);
+      if (keys) out.push({ el: keys, title: "Главное в главе", text: "Главное в главе. " + $$("li", keys).map(readable).join(" ") });
+      const quiz = $(".quiz", main);
+      if (quiz) out.push({ el: quiz, title: "Тест по главе", text: "Теперь проверьте себя: ответьте на вопросы теста. Когда закончите, нажмите кнопку «Дальше», и мы перейдём к следующей главе.", wait: true });
+      const next = $(".pager-next", main) || (main.querySelector(".hero") ? $(".course-card", main) : null);
+      if (next) out.push({ el: next, title: "Дальше", text: "Переходим дальше.", go: next.getAttribute("href") });
+      else out.push({ el: null, title: "Готово", text: "Мы прошли эту страницу до конца.", end: true });
+      return out;
+    }
+
+    function run() {
+      if (state !== "playing") return;
+      const s = steps[idx];
+      if (!s) { stop(); return; }
+      highlight(s.el);
+      say(s.title, s.text);
+      const done = () => { if (state !== "playing") return; idx++; run(); };
+      if (s.panel && s.panel.__tour) { s.panel.__tour(done, prefs.mode !== "full"); return; }
+      if (s.go) { speak({ text: s.text, onend: () => go(s.go) }); return; }
+      if (s.end) { speak({ text: s.text, onend: () => stop(true) }); return; }
+      speak({ src: s.src, text: s.text, onend: () => {
+        if (state !== "playing") return;
+        if (s.wait) { setState("waiting"); say(s.title, "Ответьте на вопросы, затем нажмите ⏭ «Дальше»."); return; }
+        if (s.pause) setTimeout(done, s.pause / prefs.rate); else done();
+      } });
+    }
+
+    // Load the next page in place so speech keeps its permission; fall back to a normal visit.
+    async function go(href) {
+      try {
+        const res = await fetch(href);
+        if (!res.ok) throw new Error(res.status);
+        const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+        const nm = $(".main", doc), main = $(".main");
+        if (!nm || !main) throw new Error("no main");
+        main.innerHTML = nm.innerHTML;
+        const nt = $(".toc", doc), ot = $(".toc") || main.nextElementSibling;
+        if (nt && ot) { ot.className = "toc"; ot.innerHTML = nt.innerHTML; ot.setAttribute("aria-label", "На этой странице"); }
+        else if (ot && ot.classList.contains("toc")) ot.innerHTML = "";
+        document.title = doc.title;
+        const file = href.split("/").pop();
+        $$(".side-list a").forEach((a) => (a.getAttribute("href") === file ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
+        try { history.pushState({}, "", href); } catch (e) {}
+        window.scrollTo(0, 0);
+        window.__initFigures && window.__initFigures(main);
+        window.__initPage && window.__initPage(main);
+        initPanels(main);
+        steps = plan(); idx = 0;
+        setTimeout(run, 500);
+      } catch (e) {
+        store.set("pilot-resume", { at: Date.now() });
+        location.href = href;
+      }
+    }
+
+    function start() {
+      stopAll();
+      steps = plan(); idx = 0;
+      dock.classList.add("open"); dock.classList.remove("min");
+      setState("playing");
+      run();
+    }
+    function pause() { stopAll(); setState("paused"); say(ui.title.textContent, "Пауза. Нажмите ▶, чтобы продолжить с этого места."); }
+    function resume() { if (!steps.length) return start(); setState("playing"); run(); }
+    function next() { stopAll(); if (!steps.length) return start(); idx = Math.min(steps.length - 1, idx + 1); setState("playing"); run(); }
+    function stop(finished) {
+      stopAll(); setState("idle"); highlight(null); steps = []; idx = 0;
+      say("Обучение с гидом", finished ? "Готово. Нажмите ▶, чтобы пройти страницу ещё раз." : "Гид остановлен. Нажмите ▶, чтобы начать с начала страницы.");
+    }
+    return { start, pause, resume, next, stop, get state() { return state; } };
+  })();
+
+  ui.play.addEventListener("click", () => {
+    dock.classList.add("open");
+    if (pilot.state === "playing") pilot.pause();
+    else if (pilot.state === "paused") pilot.resume();
+    else if (pilot.state === "waiting") pilot.next();
+    else pilot.start();
   });
+  ui.next.addEventListener("click", () => pilot.next());
+  ui.stop.addEventListener("click", () => pilot.stop());
+  ui.mode.addEventListener("click", () => { prefs.mode = prefs.mode === "full" ? "main" : "full"; syncPrefs(); });
+  ui.rate.addEventListener("click", () => { prefs.rate = RATES[(RATES.indexOf(prefs.rate) + 1) % RATES.length]; syncPrefs(); });
+  ui.min.addEventListener("click", () => dock.classList.toggle("min"));
+  // After a full page visit (no in-place loading, e.g. opened from disk), offer to continue.
+  const resume = store.get("pilot-resume", null);
+  if (resume && Date.now() - resume.at < 120000) {
+    store.set("pilot-resume", null);
+    dock.classList.add("open");
+    ui.title.textContent = "Продолжим?";
+    ui.text.textContent = "Нажмите ▶, чтобы гид продолжил с этой страницы.";
+  }
+  window.__pilot = pilot;
 })();

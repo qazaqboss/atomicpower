@@ -54,14 +54,15 @@
     });
     update();
   }
-  $$("[data-quiz]").forEach((box) => wireQuiz($(".quiz-list", box), $("[data-score]", box), (right, total) => {
+  function initPage(scope) {
+  $$("[data-quiz]", scope).forEach((box) => wireQuiz($(".quiz-list", box), $("[data-score]", box), (right, total) => {
     progress[box.dataset.quiz] = { right, total, at: Date.now() };
     store.set("progress", progress);
     mark();
   }));
 
   // Trainer
-  const trainer = $("[data-trainer]");
+  const trainer = $("[data-trainer]", scope);
   if (trainer) {
     const bank = JSON.parse($("#bank").textContent);
     const list = $("[data-trainer-list]", trainer);
@@ -81,14 +82,14 @@
       renderMath(list);
     };
     $("[data-trainer-start]", trainer).addEventListener("click", start);
-    window.addEventListener("load", start);
+    if (window.renderMathInElement) start(); else window.addEventListener("load", start);
   }
 
   // Map: country buttons highlight that country's plants on the map figure.
-  document.querySelectorAll("[data-country]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new CustomEvent("map:country", { detail: b.dataset.country }))));
+  scope.querySelectorAll("[data-country]").forEach((b) => b.addEventListener("click", () => window.dispatchEvent(new CustomEvent("map:country", { detail: b.dataset.country }))));
 
   // Filters
-  $$("[data-filter]").forEach((input) => input.addEventListener("input", () => {
+  $$("[data-filter]", scope).forEach((input) => input.addEventListener("input", () => {
     const q = input.value.trim().toLowerCase();
     $$(input.dataset.filter).forEach((el) => { el.hidden = q && !el.textContent.toLowerCase().includes(q); });
   }));
@@ -107,6 +108,11 @@
     }, { rootMargin: "-70px 0px -60% 0px" });
     map.forEach((_, id) => { const el = document.getElementById(id); if (el) io.observe(el); });
   }
+  }
+  // Re-run page wiring on content swapped in by the guide (see guide.js).
+  window.__initPage = (scope) => { initPage(scope); mark(); renderMath(scope); };
+  window.__store = store;
+  initPage(document);
 
   // Search
   const input = $("[data-search]"), results = $("[data-results]");

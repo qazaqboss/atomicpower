@@ -183,6 +183,7 @@ function chapterPage(c, i) {
     <h1>${esc(c.title)}</h1>
     <p class="lead">${esc(c.lead)}</p>
     ${CH_GUIDE[c.num] ? `<div class="ch-audio" data-ch-audio="${audio("ch-" + c.num) || ""}" data-ch-text="${esc(CH_GUIDE[c.num])}"><button type="button" aria-label="Слушать аудиогид">▶</button><div class="ch-audio-body"><b>Аудиогид к главе</b><span class="ch-audio-track"><span data-ch-bar></span></span></div><span class="ch-audio-time" data-ch-time>${esc(VOICE.name.split(" ")[0])} · ElevenLabs</span></div>` : ""}
+    <div class="ch-actions"><button type="button" class="btn" data-pilot-start>▶ Пройти главу с гидом</button><span>Гид прочитает главу, покажет модели и остановится перед тестом.</span></div>
   </header>
   <div class="prose">${body}</div>
   ${c.keypoints.length ? `<section class="block keypoints" id="keypoints"><h2>Главное в главе</h2><ul>${c.keypoints.map((k) => `<li>${k}</li>`).join("")}</ul></section>` : ""}
@@ -208,7 +209,7 @@ function indexPage() {
     <div class="ch-kicker"><span>Учебный курс</span><span>${chapters.length} глав</span><span>${FIG_NAMES.length} интерактивных моделей</span></div>
     <h1>Атомная энергетика<br>от&nbsp;А&nbsp;до&nbsp;Я</h1>
     <p class="lead">От строения ядра и закона радиоактивного распада — до физики реактора, устройства АЭС, безопасности, топливного цикла и атомной отрасли Казахстана. Большие разборы, формулы с примерами расчёта, модели, которые можно трогать, тесты и экзаменационные билеты.</p>
-    <div class="hero-actions"><a class="btn primary" href="${chapters[0]?.href || "#"}">Начать с главы 01</a><a class="btn" href="exam.html">Тренажёр к экзамену</a></div>
+    <div class="hero-actions"><button type="button" class="btn primary" data-pilot-start>▶ Учиться с гидом</button><a class="btn" href="${chapters[0]?.href || "#"}">Начать с главы 01</a><a class="btn" href="exam.html">Тренажёр к экзамену</a></div>
     <dl class="stats"><div><dt>${Math.round(total / 1000)} тыс.</dt><dd>слов учебного текста</dd></div><div><dt>${q}</dt><dd>тестовых вопросов</dd></div><div><dt>${terms}</dt><dd>терминов</dd></div></dl>
   </div>
 </section>
