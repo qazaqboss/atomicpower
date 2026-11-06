@@ -138,7 +138,8 @@ const quizHtml = (c) => c.quiz.length ? `
 </section>` : "";
 
 function chapterPage(c, i) {
-  let body = c.body;
+  // Wrap any bare table so it scrolls on its own instead of widening the page.
+  let body = c.body.replace(/(<div class="table">\s*)?(<table[\s\S]*?<\/table>)/g, (m, wrap, table) => (wrap ? m : `<div class="table">${table}</div>`));
   const used = [];
   body = body.replace(/<!--FIG:(\w+)-->/g, (_, name) => { if (!figures[name]) return ""; used.push(name); return `<div class="fig-wrap">${figures[name].html}</div>`; });
   const prev = chapters[i - 1], next = chapters[i + 1];

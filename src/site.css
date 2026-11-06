@@ -11,7 +11,7 @@ body{margin:0;background:var(--anatomy-page);color:var(--anatomy-text);font:16px
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline;text-underline-offset:3px}
 .skip{position:absolute;left:-9999px}.skip:focus{left:12px;top:12px;z-index:99;background:var(--anatomy-card);padding:8px 12px}
-svg{stroke:currentColor;fill:none}
+.icon-btn svg,.brand svg,.search-box svg{stroke:currentColor;fill:none}
 
 /* top bar */
 .top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;height:60px;padding:0 20px;background:color-mix(in srgb,var(--anatomy-page) 86%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
@@ -213,3 +213,12 @@ sup,sub{line-height:0}
   .formula-grid,.ticket-grid{grid-template-columns:1fr}
 }
 @media print{.top,.side,.toc,.foot,.fig-controls,.quiz,.pager{display:none!important}.shell{display:block}body{background:#fff;color:#000}}
+
+/* overflow guards */
+.iso-plate{overflow:hidden}
+.prose p,.prose li,.block li,.quiz-q,.formula-card,.terms dd,.gloss dd{overflow-wrap:break-word}
+.prose p .katex,.prose li .katex,.block .katex,.quiz-q .katex{white-space:normal}
+.katex .katex-mathml{max-width:1px;overflow:hidden}
+.prose p,.prose li,.quiz-q,.block li,.example,.def,.note,.history{overflow-x:auto;overflow-y:hidden}
+@media (max-width:900px){.top{gap:8px;padding:0 10px}.search{min-width:0}.search-box{padding:0 10px}}
+.katex{position:relative}
