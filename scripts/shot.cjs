@@ -11,7 +11,7 @@ const { chromium } = require("playwright");
   await p.waitForTimeout(600);
   const el = sel === "viewport" ? null : await p.$(sel);
   if (hover) { const box = await el.boundingBox(); const [fx, fy] = hover.split(",").map(Number); await p.mouse.move(box.x + box.width * fx, box.y + box.height * fy); }
-  await p.waitForTimeout(1500);
+  await p.waitForTimeout(+(process.env.WAIT || 1500));
   if (sel === "viewport") await p.screenshot({ path: out }); else await el.screenshot({ path: out });
   console.log(errs.join("\n") || "no errors");
   await b.close();

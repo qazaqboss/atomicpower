@@ -9,5 +9,5 @@ const f = mod.build();
 const kit = readFileSync(new URL("../kit/iso-kit.mjs", import.meta.url), "utf8").replace(/^export /gm, "");
 const script = kit + `\n(function(root){${f.live}})(document.querySelector('[data-fig="${f.name}"]'));`;
 const out = process.argv[4] || `/tmp/claude-0/-home-user-atomicpower/de75e2ce-a076-5bcf-b942-65fee72af5ef/scratchpad/${name}-${theme}.html`;
-writeFileSync(out, k.pageHtml({ title: name, theme, body: f.html, script, width: 760 }));
+writeFileSync(out, k.pageHtml({ title: name, theme, body: f.html + "<style>" + readFileSync(new URL("../src/site.css", import.meta.url), "utf8") + "</style>", script, width: 760 }));
 console.log("wrote", out);

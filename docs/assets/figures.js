@@ -676,6 +676,83 @@ const ISO_CSS = `
 `;
 
 const FIGURES = {
+  "pile": function (root) {
+
+const stage = root.querySelector(".iso-stage");
+const svg = stage.querySelector("svg");
+const readout = root.querySelector("[data-readout]");
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const say = (text) => { if (readout.textContent !== text) readout.textContent = text; };
+let visible = false, frame = 0, last = 0;
+const loop = (tick) => {
+  const step = (now) => {
+    const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
+    last = now;
+    const more = tick(dt, still.matches);
+    frame = visible && more !== false ? requestAnimationFrame(step) : 0;
+  };
+  const run = () => { if (!frame && visible) { last = 0; frame = requestAnimationFrame(step); } };
+  new IntersectionObserver((entries) => { visible = entries[entries.length - 1].isIntersecting; if (visible) run(); }, { rootMargin: "120px 0px" }).observe(stage);
+  return run;
+};
+const shareX = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientX - box.left) / box.width, 0, 1); };
+const shareY = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientY - box.top) / box.height, 0, 1); };
+const fmt = (v, d = 2) => v.toFixed(d).replace(".", ",");
+
+const P = {"origin":[275.9775082613837,236.8290638331109],"scale":1.4143575376369304,"azimuth":34,"elevation":28};
+const ROD_Z = 60, ROD_OUT = 96, R_AT = 63.98;
+const BETA = 0.0065, LAMBDA = 0.001, LAM = 0.08, SPEED = 10;
+const DIAL = [136,59], BOX = {"x":120,"y":44,"w":50,"d":30,"r":3};
+const rodG = svg.querySelector("[data-rod]");
+const needle = svg.querySelector("[data-needle]");
+const trace = svg.querySelector("[data-trace]");
+const needleAt = (P, x, y, z, r, share, { span = Math.PI * 1.5, from = -Math.PI * 0.75 } = {}) => {
+  const a = from + span * share;
+  return lineOnTop([x - Math.sin(a) * 2.6, y + Math.cos(a) * 2.6], [x + Math.sin(a) * (r - 3), y - Math.cos(a) * (r - 3)], z + 0.2, P);
+};
+const rhoOf = (f) => 0.0006 - 0.004 * (1 - f);
+const SRC = 0.0034 / LAMBDA; // n = 1 with the strip fully in
+let f = 0, target = 0, n = 1, C = BETA / (LAMBDA * LAM), drawn = -1, zip = false, hist = [], tclock = 0, touring = true, clock = 0, idle = 0;
+const tour = [0, 0.3, 0.55, 0.75, 0.85, 1, 1];
+function drawRod() {
+  if (Math.abs(f - drawn) < 0.0008) return; drawn = f;
+  const x0 = R_AT - 2, x1 = R_AT + 8 + ROD_OUT * f;
+  rodG.innerHTML = solidSvg(slabOf({ x: x0, y: -2.5, w: x1 - x0, d: 5, r: 0.4 }, ROD_Z - 0.8, 1.6, P, 2, 0), { tone: "hi", lit: true }) +
+    solidSvg(slabOf({ x: x1, y: -4, w: 3, d: 8, r: 0.6 }, ROD_Z - 2, 4, P, 2, 0), { tone: "mid" });
+}
+const run = loop((dt, calm) => {
+  if (touring && !zip) { clock += dt; target = tour[Math.min(tour.length - 1, Math.floor(clock / 5))]; if (clock > 60) { clock = 0; n = 1; C = BETA / (LAMBDA * LAM); } }
+  const v = zip ? 2 : 0.12;
+  f += clamp(target - f, -v * dt, v * dt);
+  const rho = rhoOf(f);
+  const sub = 40, h = dt * SPEED / sub, before = n;
+  for (let i = 0; i < sub; i++) {
+    n = (n + h * (LAM * C + SRC)) / (1 - h * (rho - BETA) / LAMBDA);
+    C = (C + h * (BETA / LAMBDA) * n) / (1 + h * LAM);
+  }
+  if (n > 300 && !zip) { zip = true; target = 0; touring = false; }
+  drawRod();
+  const counts = 5 * n;
+  const share = clamp(Math.log10(counts) / 4, 0, 1);
+  needle.setAttribute("d", needleAt(P, DIAL[0], DIAL[1], 19.6, 11, share, { span: Math.PI * 1.4, from: -Math.PI * 0.7 }));
+  tclock += dt; if (tclock > 0.25) { tclock = 0; hist.push(share); if (hist.length > 40) hist.shift(); }
+  const pts = hist.map((s, i) => iso([BOX.x + 33 + (i / 40) * 12, BOX.y + 24 - s * 18, 24.1], P));
+  trace.setAttribute("d", pts.length > 1 ? "M" + pts.map(([x, y]) => x.toFixed(1) + " " + y.toFixed(1)).join("L") : "");
+  const rate = (n - before) / (dt * SPEED) / n;
+  const T = Math.abs(rate) < 1e-4 ? "∞" : (rate > 0 ? "+" : "−") + fmt(Math.abs(1 / rate), 0) + " с";
+  const kk = 1 / (1 - rho);
+  say((zip ? "сброс «Zip» · " : "") + "планка выдвинута на " + fmt(f * 100, 0) + " % · k = " + kk.toFixed(4).replace(".", ",") + " · " + fmt(counts, 0) + " имп/с · T = " + T + " · время ×10");
+  return true;
+});
+const manual = () => { touring = false; clearTimeout(idle); idle = setTimeout(() => { if (!zip) { touring = !still.matches; clock = 0; } }, 20000); run(); };
+root.querySelector("[data-step]").addEventListener("click", () => { zip = false; target = Math.min(1, Math.round((target + 0.15) * 20) / 20); manual(); });
+root.querySelector("[data-zip]").addEventListener("click", () => { zip = true; target = 0; manual(); });
+stage.addEventListener("keydown", (e) => { if (e.key === "ArrowRight") { zip = false; target = Math.min(1, target + 0.05); } else if (e.key === "ArrowLeft") target = Math.max(0, target - 0.05); else return; e.preventDefault(); manual(); });
+if (still.matches) touring = false;
+drawRod();
+
+  },
   "binding": function (root) {
 
 const stage = root.querySelector(".iso-stage");
@@ -1216,6 +1293,283 @@ const run = loop((dt, calm) => {
 stage.addEventListener("pointermove", (e) => { touring = false; target = 0.3 + 0.7 * clamp((shareX(e) - 0.15) / 0.7, 0, 1); clearTimeout(idle); idle = setTimeout(() => { touring = !still.matches; clock = 0; }, 5000); run(); });
 stage.addEventListener("keydown", (e) => { if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return; e.preventDefault(); touring = false; target = clamp(target + (e.key === "ArrowRight" ? 0.05 : -0.05), 0.3, 1); run(); });
 if (still.matches) touring = false;
+
+  },
+  "barriers": function (root) {
+
+const stage = root.querySelector(".iso-stage");
+const svg = stage.querySelector("svg");
+const readout = root.querySelector("[data-readout]");
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const say = (text) => { if (readout.textContent !== text) readout.textContent = text; };
+let visible = false, frame = 0, last = 0;
+const loop = (tick) => {
+  const step = (now) => {
+    const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
+    last = now;
+    const more = tick(dt, still.matches);
+    frame = visible && more !== false ? requestAnimationFrame(step) : 0;
+  };
+  const run = () => { if (!frame && visible) { last = 0; frame = requestAnimationFrame(step); } };
+  new IntersectionObserver((entries) => { visible = entries[entries.length - 1].isIntersecting; if (visible) run(); }, { rootMargin: "120px 0px" }).observe(stage);
+  return run;
+};
+const shareX = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientX - box.left) / box.width, 0, 1); };
+const shareY = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientY - box.top) / box.height, 0, 1); };
+const fmt = (v, d = 2) => v.toFixed(d).replace(".", ",");
+
+const P = {"origin":[310,470.40331562594696],"scale":1.0037230686294538,"azimuth":40,"elevation":28};
+const B = [{"id":"pellets","name":"Топливная матрица","holds":"удерживает большую часть продуктов деления в кристаллической решётке UO₂"},{"id":"cladding","name":"Оболочка твэла","holds":"герметичная трубка из циркониевого сплава удерживает газообразные и летучие продукты деления"},{"id":"vessel","name":"Граница первого контура","holds":"корпус реактора и трубопроводы держат теплоноситель под давлением 15,7 МПа"},{"id":"containment","name":"Защитная оболочка","holds":"железобетонный контаймент с металлической облицовкой удерживает выбросы даже при разрыве контура"}];
+const LIFT = {"cladding":47,"vessel":118,"containment":262};
+const shells = { cladding: svg.querySelector('[data-lift="cladding"]'), vessel: svg.querySelector('[data-lift="vessel"]'), containment: svg.querySelector('[data-lift="containment"]') };
+let open = 0, target = 0, shown = { cladding: 0, vessel: 0, containment: 0 }, touring = true, clock = 0, idle = 0;
+// open: how many outer barriers are lifted (0..3): 1 = containment, 2 = + vessel, 3 = + cladding.
+const order = ["containment", "vessel", "cladding"];
+const run = loop((dt, calm) => {
+  if (touring) { clock += dt; target = [0, 1, 2, 3, 3, 0][Math.floor(clock / 3) % 6]; }
+  let moving = false;
+  order.forEach((id, i) => {
+    const want = target > i ? 1 : 0;
+    shown[id] = calm ? want : shown[id] + (want - shown[id]) * (1 - Math.exp(-dt / 0.4));
+    if (Math.abs(want - shown[id]) < 0.002) shown[id] = want; else moving = true;
+    shells[id].setAttribute("transform", translateAlong(P, [0, 0, LIFT[id] * shown[id]]));
+  });
+  const inner = 3 - target; // index of the barrier now on the outside
+  const b = B[inner];
+  say("открыто " + target + " из 3 · снаружи: " + b.name.toLowerCase() + " (барьер " + (inner + 1) + ")");
+  root.querySelectorAll("[data-open]").forEach((btn) => btn.setAttribute("aria-pressed", String(+btn.dataset.open === inner)));
+  return touring || moving;
+});
+const pick = (inner) => { touring = false; target = 3 - inner; clearTimeout(idle); idle = setTimeout(() => { touring = !still.matches; clock = 0; run(); }, 12000); run(); };
+root.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => pick(+b.dataset.open)));
+stage.addEventListener("keydown", (e) => { if (e.key === "ArrowUp") pick(Math.max(0, 3 - Math.min(3, target + 1))); else if (e.key === "ArrowDown") pick(3 - Math.max(0, target - 1)); else return; e.preventDefault(); });
+if (still.matches) touring = false;
+
+  },
+  "dose": function (root) {
+
+const stage = root.querySelector(".iso-stage");
+const svg = stage.querySelector("svg");
+const readout = root.querySelector("[data-readout]");
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const say = (text) => { if (readout.textContent !== text) readout.textContent = text; };
+let visible = false, frame = 0, last = 0;
+const loop = (tick) => {
+  const step = (now) => {
+    const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
+    last = now;
+    const more = tick(dt, still.matches);
+    frame = visible && more !== false ? requestAnimationFrame(step) : 0;
+  };
+  const run = () => { if (!frame && visible) { last = 0; frame = requestAnimationFrame(step); } };
+  new IntersectionObserver((entries) => { visible = entries[entries.length - 1].isIntersecting; if (visible) run(); }, { rootMargin: "120px 0px" }).observe(stage);
+  return run;
+};
+const shareX = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientX - box.left) / box.width, 0, 1); };
+const shareY = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientY - box.top) / box.height, 0, 1); };
+const fmt = (v, d = 2) => v.toFixed(d).replace(".", ",");
+
+const P = {"origin":[258.85243376663,68.7921132365595],"scale":1.209006850207047,"azimuth":28,"elevation":34};
+const G0 = 0.0927, A = 1000, PB = 0.07691148990827339, R0 = 50, R1 = 300;
+const meter = svg.querySelector("[data-meter]");
+const screen = svg.querySelector("[data-screen]");
+const needle = svg.querySelector("[data-needle]");
+const btn = root.querySelector("[data-pb]");
+const min = root.querySelector("[data-min]"), minOut = root.querySelector("[data-min-out]");
+const needleAt = (P, x, y, z, r, share, { span = Math.PI * 1.5, from = -Math.PI * 0.75 } = {}) => {
+  const a = from + span * share;
+  return lineOnTop([x - Math.sin(a) * 2.6, y + Math.cos(a) * 2.6], [x + Math.sin(a) * (r - 3), y - Math.cos(a) * (r - 3)], z + 0.2, P);
+};
+let x = 100, target = 100, pb = false, s = 1, touring = true, clock = 0, idle = 0, shownN = 0.5;
+const tour = [50, 100, 200, 300, 100, 70];
+const run = loop((dt, calm) => {
+  if (touring) { clock += dt; target = tour[Math.floor(clock / 2.6) % tour.length]; }
+  x = calm ? target : x + (target - x) * (1 - Math.exp(-dt / 0.35));
+  s = calm ? (pb ? 0 : 1) : s + ((pb ? 0 : 1) - s) * (1 - Math.exp(-dt / 0.25));
+  meter.setAttribute("transform", translateAlong(P, [x, 0, 0]));
+  screen.setAttribute("transform", translateAlong(P, [0, 44 * s, 0]));
+  const r = x / 100;
+  const rate = G0 * A / (r * r) * (pb ? PB : 1);
+  const share = Math.max(0, Math.min(1, (Math.log10(rate) + 1) / 4)); // 0,1 … 1000 мкЗв/ч
+  shownN = calm ? share : shownN + (share - shownN) * (1 - Math.exp(-dt / 0.2));
+  needle.setAttribute("d", needleAt(P, 0, 1, 30.4, 7.4, shownN, { span: Math.PI, from: -Math.PI / 2 }));
+  const t = +min.value;
+  const dose = rate * t / 60;
+  say("r = " + fmt(r, 2) + " м · Ḣ ≈ " + (rate >= 10 ? fmt(rate, 0) : fmt(rate, 1)) + " мкЗв/ч · за " + t + " мин ≈ " + (dose >= 10 ? fmt(dose, 0) : fmt(dose, 1)) + " мкЗв" + (pb ? " · за экраном" : ""));
+  return touring || Math.abs(target - x) > 0.05 || Math.abs((pb ? 0 : 1) - s) > 0.002;
+});
+const manual = () => { touring = false; clearTimeout(idle); idle = setTimeout(() => { touring = !still.matches; clock = 0; run(); }, 6000); run(); };
+stage.addEventListener("pointermove", (e) => { target = R0 + clamp((shareX(e) - 0.15) / 0.8, 0, 1) * (R1 - R0); manual(); });
+stage.addEventListener("keydown", (e) => { if (e.key === "ArrowRight") target = Math.min(R1, target + 25); else if (e.key === "ArrowLeft") target = Math.max(R0, target - 25); else return; e.preventDefault(); manual(); });
+btn.addEventListener("click", () => { pb = !pb; btn.setAttribute("aria-pressed", String(pb)); manual(); });
+min.addEventListener("input", () => { minOut.textContent = min.value + " мин"; run(); });
+if (still.matches) touring = false;
+
+  },
+  "cask": function (root) {
+
+const stage = root.querySelector(".iso-stage");
+const svg = stage.querySelector("svg");
+const readout = root.querySelector("[data-readout]");
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const say = (text) => { if (readout.textContent !== text) readout.textContent = text; };
+let visible = false, frame = 0, last = 0;
+const loop = (tick) => {
+  const step = (now) => {
+    const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
+    last = now;
+    const more = tick(dt, still.matches);
+    frame = visible && more !== false ? requestAnimationFrame(step) : 0;
+  };
+  const run = () => { if (!frame && visible) { last = 0; frame = requestAnimationFrame(step); } };
+  new IntersectionObserver((entries) => { visible = entries[entries.length - 1].isIntersecting; if (visible) run(); }, { rootMargin: "120px 0px" }).observe(stage);
+  return run;
+};
+const shareX = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientX - box.left) / box.width, 0, 1); };
+const shareY = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientY - box.top) / box.height, 0, 1); };
+const fmt = (v, d = 2) => v.toFixed(d).replace(".", ",");
+
+const P = {"origin":[310,354.6625149468314],"scale":1.3483280070096324,"azimuth":40,"elevation":32};
+const HEAT = [[1,10],[5,2.6],[10,1.6],[30,1],[50,0.75],[100,0.4],[300,0.15],[1000,0.07]];
+const N = 13, TU = 0.43, LIFT = 70;
+const lid = svg.querySelector("[data-lid]");
+const heats = [...svg.querySelectorAll("[data-heat]")];
+const btn = root.querySelector("[data-lidbtn]");
+let lg = Math.log10(5), target = lg, open = 1, openT = 1, touring = true, clock = 0, idle = 0;
+const heatAt = (t) => {
+  const x = Math.log10(t);
+  for (let i = 0; i < HEAT.length - 1; i++) {
+    const [t0, q0] = HEAT[i], [t1, q1] = HEAT[i + 1];
+    const a = Math.log10(t0), b = Math.log10(t1);
+    if (x <= b || i === HEAT.length - 2) { const f = (x - a) / (b - a); return Math.pow(10, Math.log10(q0) + f * (Math.log10(q1) - Math.log10(q0))); }
+  }
+};
+const run = loop((dt, calm) => {
+  if (touring) { clock += dt; target = Math.log10([5, 10, 40, 100, 300][Math.floor(clock / 2.6) % 5]); }
+  lg = calm ? target : lg + (target - lg) * (1 - Math.exp(-dt / 0.4));
+  open = calm ? openT : open + (openT - open) * (1 - Math.exp(-dt / 0.35));
+  lid.setAttribute("transform", translateAlong(P, [0, 0, LIFT * open]));
+  const t = Math.pow(10, lg);
+  const q = heatAt(t);
+  const glow = Math.max(0, Math.min(1, (Math.log10(q) + 1.2) / 2.2));
+  heats.forEach((h) => { h.style.opacity = (0.15 + 0.85 * glow).toFixed(3); });
+  const perFA = q * TU; // кВт на сборку
+  say("выдержка " + (t >= 100 ? fmt(t, 0) : fmt(t, 1)) + " лет · ≈ " + fmt(q, q < 1 ? 2 : 1) + " кВт/т · " + N + " ТВС ≈ " + fmt(perFA * N, 1) + " кВт");
+  return touring || Math.abs(target - lg) > 0.001 || Math.abs(openT - open) > 0.002;
+});
+const manual = () => { touring = false; clearTimeout(idle); idle = setTimeout(() => { touring = !still.matches; clock = 0; run(); }, 6000); run(); };
+stage.addEventListener("pointermove", (e) => { target = clamp((shareX(e) - 0.12) / 0.76, 0, 1) * 3; manual(); });
+stage.addEventListener("keydown", (e) => { if (e.key === "ArrowRight") target = Math.min(3, target + 0.25); else if (e.key === "ArrowLeft") target = Math.max(0, target - 0.25); else return; e.preventDefault(); manual(); });
+btn.addEventListener("click", () => { openT = openT ? 0 : 1; btn.setAttribute("aria-pressed", String(!!openT)); btn.textContent = openT ? "Крышка снята" : "Крышка закрыта"; manual(); });
+if (still.matches) touring = false;
+
+  },
+  "tokamak": function (root) {
+
+const stage = root.querySelector(".iso-stage");
+const svg = stage.querySelector("svg");
+const readout = root.querySelector("[data-readout]");
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const say = (text) => { if (readout.textContent !== text) readout.textContent = text; };
+let visible = false, frame = 0, last = 0;
+const loop = (tick) => {
+  const step = (now) => {
+    const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
+    last = now;
+    const more = tick(dt, still.matches);
+    frame = visible && more !== false ? requestAnimationFrame(step) : 0;
+  };
+  const run = () => { if (!frame && visible) { last = 0; frame = requestAnimationFrame(step); } };
+  new IntersectionObserver((entries) => { visible = entries[entries.length - 1].isIntersecting; if (visible) run(); }, { rootMargin: "120px 0px" }).observe(stage);
+  return run;
+};
+const shareX = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientX - box.left) / box.width, 0, 1); };
+const shareY = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientY - box.top) / box.height, 0, 1); };
+const fmt = (v, d = 2) => v.toFixed(d).replace(".", ",");
+
+const back = svg.querySelector('[data-plasma="back"]'), front = svg.querySelector('[data-plasma="front"]');
+// Design discharge (ITER goals): 0–100 s current ramp, heating, 400 s burn, ramp-down.
+const PHASES = [[0, "ввод тока"], [100, "нагрев плазмы"], [150, "горение, Q = 10"], [550, "гашение"], [650, "пауза"]];
+let t = 0, scrub = null, speed = 60;
+const phaseAt = (s) => { let p = PHASES[0][1]; for (const [t0, name] of PHASES) if (s >= t0) p = name; return p; };
+const run = loop((dt, calm) => {
+  if (scrub !== null) t = t + (scrub - t) * (1 - Math.exp(-dt / 0.15));
+  else { t += dt * speed; if (t > 760) t = 0; }
+  if (calm && scrub === null) t = 300;
+  const ip = t < 100 ? 15 * t / 100 : t < 550 ? 15 : t < 650 ? 15 * (650 - t) / 100 : 0;
+  const pf = t < 100 ? 0 : t < 150 ? 500 * (t - 100) / 50 : t < 550 ? 500 : t < 600 ? 500 * (600 - t) / 50 : 0;
+  const glow = Math.min(1, ip / 15 * 0.55 + pf / 500 * 0.45);
+  const flicker = calm ? 1 : 0.93 + 0.07 * Math.sin(performance.now() / 90);
+  back.style.opacity = front.style.opacity = (glow * flicker).toFixed(3);
+  say("t = " + fmt(t, 0) + " с · " + phaseAt(t) + " · Ip = " + fmt(ip, 1) + " МА · Pсинт ≈ " + fmt(pf, 0) + " МВт");
+  return true;
+});
+stage.addEventListener("pointermove", (e) => { scrub = clamp((shareX(e) - 0.1) / 0.8, 0, 1) * 700; });
+stage.addEventListener("pointerleave", () => { scrub = null; });
+stage.addEventListener("keydown", (e) => { if (e.key === "ArrowRight") scrub = Math.min(700, (scrub ?? t) + 50); else if (e.key === "ArrowLeft") scrub = Math.max(0, (scrub ?? t) - 50); else if (e.key === "Escape") scrub = null; else return; e.preventDefault(); });
+
+  },
+  "isl": function (root) {
+
+const stage = root.querySelector(".iso-stage");
+const svg = stage.querySelector("svg");
+const readout = root.querySelector("[data-readout]");
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const say = (text) => { if (readout.textContent !== text) readout.textContent = text; };
+let visible = false, frame = 0, last = 0;
+const loop = (tick) => {
+  const step = (now) => {
+    const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
+    last = now;
+    const more = tick(dt, still.matches);
+    frame = visible && more !== false ? requestAnimationFrame(step) : 0;
+  };
+  const run = () => { if (!frame && visible) { last = 0; frame = requestAnimationFrame(step); } };
+  new IntersectionObserver((entries) => { visible = entries[entries.length - 1].isIntersecting; if (visible) run(); }, { rootMargin: "120px 0px" }).observe(stage);
+  return run;
+};
+const shareX = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientX - box.left) / box.width, 0, 1); };
+const shareY = (event) => { const box = svg.getBoundingClientRect(); return clamp((event.clientY - box.top) / box.height, 0, 1); };
+const fmt = (v, d = 2) => v.toFixed(d).replace(".", ",");
+
+const P = {"origin":[330,308.5089484526214],"scale":1.3006341184530963,"azimuth":40,"elevation":32};
+const INJ = [[88.66009467376819,48.86560619984019],[66.65220714787367,69.25317316227043],[37.9921124741055,60.38756696243024],[31.33990532623182,31.13439380015982],[53.34779285212631,10.746826837729582],[82.0078875258945,19.61243303756976]], PROD = [60,40], Z = 34.4;
+const host = svg.querySelector("[data-flowdots]");
+const btn = root.querySelector("[data-pump]");
+const NS = "http://www.w3.org/2000/svg";
+const dots = [];
+for (let w = 0; w < INJ.length; w++) for (let j = 0; j < 5; j++) {
+  const c = document.createElementNS(NS, "circle");
+  c.setAttribute("r", "1.3");
+  host.appendChild(c);
+  dots.push({ c, w, t: j / 5 });
+}
+let on = true, rate = 1, clock = 0;
+const run = loop((dt, calm) => {
+  rate = calm ? (on ? 1 : 0) : rate + ((on ? 1 : 0) - rate) * (1 - Math.exp(-dt / 0.6));
+  clock += dt * rate;
+  for (const d of dots) {
+    d.t = (d.t + dt * 0.22 * rate) % 1;
+    const [x0, y0] = INJ[d.w];
+    const s = d.t;
+    // a slight bow, as streamlines spread between wells
+    const bow = Math.sin(s * Math.PI) * 5 * (d.w % 2 ? 1 : -1);
+    const dx = PROD[0] - x0, dy = PROD[1] - y0, l = Math.hypot(dx, dy);
+    const x = x0 + dx * s - (dy / l) * bow, y = y0 + dy * s + (dx / l) * bow;
+    const [sx, sy] = iso([x, y, Z], P);
+    d.c.setAttribute("cx", sx.toFixed(1)); d.c.setAttribute("cy", sy.toFixed(1));
+    d.c.style.opacity = (rate * (0.35 + 0.65 * Math.sin(s * Math.PI))).toFixed(2);
+    d.c.style.fill = s > 0.6 ? "var(--anatomy-green)" : "var(--anatomy-blue)";
+  }
+  say(on ? "закачка: слабый раствор H₂SO₄ → рудный горизонт → откачка продуктивного раствора · 6 закачных + 1 откачная" : "насосы остановлены");
+  return on || rate > 0.01;
+});
+btn.addEventListener("click", () => { on = !on; btn.setAttribute("aria-pressed", String(on)); btn.textContent = on ? "Насосы работают" : "Насосы остановлены"; run(); });
 
   },
 };

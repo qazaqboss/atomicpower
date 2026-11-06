@@ -15,13 +15,13 @@ const SITE = "Атом от А до Я";
 const KATEX = "assets/katex"; // vendored KaTeX 0.16.9 (MIT), see vendor/katex
 
 // ---------- figures ----------
-const FIG_NAMES = ["binding", "decay", "shielding", "chain", "core", "fuel", "loop"].filter((n) => {
+const FIG_NAMES = ["pile", "binding", "decay", "shielding", "chain", "core", "fuel", "loop", "barriers", "dose", "cask", "tokamak", "isl"].filter((n) => {
   try { readFileSync(join(ROOT, "figures", n + ".mjs")); return true; } catch { return false; }
 });
 const figures = {};
 for (const name of FIG_NAMES) figures[name] = (await import(`./figures/${name}.mjs`)).build();
 const audio = (name) => (existsSync(join(ROOT, "src/audio", name + ".mp3")) ? `assets/audio/${name}.mp3` : null);
-const TITLES = { binding: "Энергия связи", decay: "Закон распада", shielding: "Защита от излучений", chain: "Цепная реакция", core: "Управление реактором", fuel: "Твэл и ТВС", loop: "Энергоблок ВВЭР-1000" };
+const TITLES = { pile: "Чикагская поленница CP-1", barriers: "Барьеры безопасности", dose: "Время, расстояние, экран", cask: "Сухое хранение ОЯТ", tokamak: "Токамак ИТЭР", isl: "Скважинное выщелачивание", binding: "Энергия связи", decay: "Закон распада", shielding: "Защита от излучений", chain: "Цепная реакция", core: "Управление реактором", fuel: "Твэл и ТВС", loop: "Энергоблок ВВЭР-1000" };
 const guidePanel = (name) => {
   const g = GUIDE[name];
   if (!g) return "";
@@ -297,7 +297,7 @@ ${FORMULAS.map((g) => `<section class="block formulas"><h2>${g.title}${g.ch ? ` 
 }
 
 function figuresPage() {
-  const where = { binding: "02", decay: "03", shielding: "04", chain: "05", core: "06", fuel: "07", loop: "09" };
+  const where = { pile: "01", barriers: "10", dose: "11", cask: "12", tokamak: "13", isl: "14", binding: "02", decay: "03", shielding: "04", chain: "05", core: "06", fuel: "07", loop: "09" };
   const main = `
 <header class="ch-head"><div class="ch-kicker"><span>Галерея</span><span>${FIG_NAMES.length} моделей</span></div><h1>Интерактивные модели</h1><p class="lead">Все фигуры курса на одной странице. Каждая — небольшой прибор на верстаке: числа в правом нижнем углу считаются той же моделью, что двигает детали.</p></header>
 ${FIG_NAMES.map((n) => `<div class="fig-wrap">${figures[n].html}${guidePanel(n)}<p class="fig-from">Из главы <a href="${chapters.find((c) => c.num === where[n])?.href || "#"}">${where[n]}. ${esc(chapters.find((c) => c.num === where[n])?.title || "")}</a></p></div>`).join("")}`;

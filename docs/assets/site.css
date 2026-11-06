@@ -362,3 +362,6 @@ sup,sub{line-height:0}
 .ch-audio-track{display:block;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
 .ch-audio-track span{display:block;height:100%;width:0;background:var(--accent)}
 .ch-audio-time{flex:none;font:11.5px var(--mono);color:var(--anatomy-muted)}
+.fig-heat{fill:var(--anatomy-red);stroke:none;opacity:.6}
+.fig-plasma{fill:none;stroke-linecap:round}
+.fig-flowdots circle{fill:var(--anatomy-blue)}
